@@ -25,7 +25,7 @@ use pacman to fetch requeried libraries
 ```
 mkdir build
 cd build
-cmake ../ -DBUILD_FRONTEND=ON (-DSPOUT2_SDK_PATH=path for spout2) -DDNDI_SDK_BASE=path for ndi sdk
+cmake ../ -DBUILD_FRONTEND=ON (-DSPOUT2_SDK_PATH=path for spout2) -DNDI_SDK_BASE=path for ndi sdk
 cmake --build .
 ```
 
@@ -35,7 +35,7 @@ install requeried libraries with the system package manager
 ```
 mkdir build
 cd build
-cmake ../ -DBUILD_FRONTEND=ON -DDNDI_SDK_BASE=path for ndi sdk
+cmake ../ -DBUILD_FRONTEND=ON -DNDI_SDK_BASE=path for ndi sdk
 cmake --build .
 ```
 
@@ -47,7 +47,7 @@ install requeried libraries using brew https://brew.sh/
 ```
 mkdir build
 cd build
-cmake ../ -DBUILD_FRONTEND=ON -DDNDI_SDK_BASE=path for ndi sdk
+cmake ../ -DBUILD_FRONTEND=ON -DNDI_SDK_BASE=path for ndi sdk
 cmake --build .
 ```
 ----

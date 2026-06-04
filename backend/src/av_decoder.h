@@ -113,6 +113,8 @@ public:
         return m_video_ctx;
     }
 
+    AVVulkanDeviceContext a;
+
     void SetFileBroswerBasePath(std::string _path) {
         FileBrowser.clearExtensions();
         FileBrowser.addExtension(".mp4");
@@ -226,6 +228,7 @@ private:
 
     void decodeLoop();
 
+
     void pushAudioToRingBuffer(AVFrame* frame);
 
     AVVulkanDeviceContext* vkDevCtx = nullptr;
@@ -308,7 +311,7 @@ private:
 
     std::atomic<bool> m_yuvFrameReady{false};
 
-
+    AVBufferRef* m_fallback_hw_device_ctx = nullptr;
 };
 
 #endif //DEJAVIS_APP_AV_DECODER_H

@@ -654,6 +654,7 @@ int CRenderer::AddVideoFilePlayerToMixer(std::string _path,int _audio_mixer_id) 
     videoMixerTextures[slot].AV_DECODER = new CAV_DECODER();
     videoMixerTextures[slot].AV_DECODER->SetFileBroswerBasePath(_path);
     videoMixerTextures[slot].AV_DECODER->InitDecoder(&m_ctx,m_audio->AUDIO_MIXER.getMixerInputItem(_audio_mixer_id)->buffer_planar.get(),48000,2);
+    videoMixerTextures[slot].AV_DECODER->InitFFmpegVulkanHW();
     //videoMixerTextures[slot].AV_DECODER->m_yuvcompute = &videoComputes[slot];
     //videoMixerTextures[slot].AV_DECODER->m_vulkan_texture = &videoTextures[slot];
 

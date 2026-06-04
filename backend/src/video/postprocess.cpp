@@ -99,6 +99,40 @@ bool CPostProcessor::uploadYuvFrame(const NDIlib_video_frame_v2_t& v) {
     return YUV2RGBPipeline::instance().uploadNDIFrame(current->yuv, v);
 }
 
+bool CPostProcessor::uploadYuvFrameVulkan(AVFrame* frame) {
+    if (m_shuttingDown.load(std::memory_order_acquire) || !frame) return false;
+    if (frame->format != AV_PIX_FMT_VULKAN || !frame->hw_frames_ctx) return false;
+
+    const uint32_t w = (uint32_t)frame->width;
+    const uint32_t h = (uint32_t)frame->height;
+    if (w == 0 || h == 0) return false;
+
+    // sw_format reale del frame Vulkan (NV12 / P010 ...): e' cio' che il
+    // converter deve sapere interpretare. Lo slot resta un normale slot "Yuv".
+    auto* fctx = reinterpret_cast<AVHWFramesContext*>(frame->hw_frames_ctx->data);
+    const int swFmt = (int)fctx->sw_format;
+
+    ProcessingSlot* current = m_activeSlot.load(std::memory_order_acquire);
+
+    const bool needsNew =
+        !current
+        || current->kind != ProcessingSlot::InputKind::Yuv
+        || current->width  != w
+        || current->height != h
+        || current->yuvPixFmt != swFmt;
+
+    if (needsNew) {
+        auto fresh = buildSlot(w, h, ProcessingSlot::InputKind::Yuv, nullptr, swFmt);
+        if (!fresh) return false;
+        ProcessingSlot* old = m_activeSlot.exchange(fresh.release(),
+                                                    std::memory_order_acq_rel);
+        if (old) retireSlot(old);
+        current = m_activeSlot.load(std::memory_order_acquire);
+    }
+
+    return YUV2RGBPipeline::instance().uploadVulkanFrame(current->yuv, frame);
+}
+
 bool CPostProcessor::notifyRgbaInputChanged(const VulkanUniTexture& newTex,
                                             uint32_t w, uint32_t h)
 {
@@ -127,6 +161,23 @@ bool CPostProcessor::submit(VkSemaphore externalWait) {
         slot->fx.chromaParams = m_chromaParams;
         slot->fx.lumaParams   = m_lumaParams;
         slot->fx.colorParams  = m_colorParams;
+    }
+
+    if (slot->kind == ProcessingSlot::InputKind::Yuv) {
+
+        if (slot->yuv.vulkanFed)
+            YUV2RGBPipeline::instance().submitAsyncVk(slot->yuv);
+        else
+            YUV2RGBPipeline::instance().submitAsync(slot->yuv);
+
+    if (fxOn) {
+            std::vector<VkSemaphore> yuvSems;
+            YUV2RGBPipeline::drainPendingSemaphores(slot->yuv, yuvSems);
+            VkSemaphore yuvSignal = yuvSems.empty() ? VK_NULL_HANDLE : yuvSems.back();
+            VideoFXPipeline::instance().submitAsync(
+            slot->fx, slot->yuv.rgbaTexture.VkTexture.view,
+            slot->yuv.rgbaTexture.VkTexture.sampler, yuvSignal);
+        }
     }
 
     if (slot->kind == ProcessingSlot::InputKind::Yuv) {

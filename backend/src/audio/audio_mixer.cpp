@@ -240,11 +240,6 @@ void CAUDIO_MIXER::ProcessMasterOutput(float **_planar_in,int _channel_size) {
     for (int i = 0; i < _channel_size; i++) {
         _planar_in[0][i] *= volL;
         _planar_in[1][i] *= volR;
-
-        float absL = std::fabs(_planar_in[0][i]);
-        float absR = std::fabs(_planar_in[0][i]);
-        if (absL > out->levelL) out->levelL = absL;
-        if (absR > out->levelR) out->levelR = absR;
     }
 
 
@@ -266,7 +261,7 @@ void CAUDIO_MIXER::ProcessMasterOutput(float **_planar_in,int _channel_size) {
     if (!converted) return;
 
 
-    out->buffer->write((float *)converted->data, converted->nb_samples * 2);
+    out->buffer->write((float *)converted->data[0], converted->nb_samples * 2);
 
 }
 
@@ -315,11 +310,9 @@ void CAUDIO_MIXER::ProcessMasterMix(size_t frames) {
 
     if (m_outputs[0]->buffer->getAvailableWrite() < master_frames*2) return;
 
-    // Azzera gli accumulator di mix per canale
     std::fill(m_masterMix[0].begin(), m_masterMix[0].begin() + frames, 0.0f);
     std::fill(m_masterMix[1].begin(), m_masterMix[1].begin() + frames, 0.0f);
 
-    // Puntatori planar per la read dall'input
     float* tempIn[2] = { m_mastertempInput[0].data(), m_mastertempInput[1].data() };
 
     for (auto& input : m_inputs) {

@@ -55,23 +55,21 @@ struct EncoderCandidate {
 
 #ifdef __linux__
 static const EncoderCandidate kCandidates[] = {
-    { "h264_nvenc",   AV_PIX_FMT_NV12 },     // NVIDIA
-    { "h264_amf",     AV_PIX_FMT_NV12 },     // AMD
-    { "h264_qsv",     AV_PIX_FMT_NV12 },     // Intel QuickSync
-    { "h264_vaapi",     AV_PIX_FMT_VAAPI },     // VAAPI
-    { "libx264",      AV_PIX_FMT_YUV420P },  // software fallback
+    { "h264_vulkan",  AV_PIX_FMT_VULKAN },
+    { "h264_nvenc",   AV_PIX_FMT_NV12 },
+    { "h264_vaapi",     AV_PIX_FMT_VAAPI },
+    { "libx264",      AV_PIX_FMT_YUV420P },
 };
 #elif _WIN32
 static const EncoderCandidate kCandidates[] = {
-    { "h264_nvenc",   AV_PIX_FMT_NV12 },     // NVIDIA
-    { "h264_amf",     AV_PIX_FMT_NV12 },     // AMD
-    { "h264_mf",      AV_PIX_FMT_NV12 },     // Microsoft MF (universal-ish)
-    { "libx264",      AV_PIX_FMT_YUV420P },  // software fallback
+    { "h264_vulkan",  AV_PIX_FMT_VULKAN },
+    { "h264_nvenc",   AV_PIX_FMT_NV12 },
+    { "libx264",      AV_PIX_FMT_YUV420P },
 };
 #else
 static const EncoderCandidate kCandidates[] = {
-    { "h264_videotoolbox",   AV_PIX_FMT_NV12 },     // APPLE VIDEOTOOLBOX
-    { "libx264",      AV_PIX_FMT_YUV420P },  // software fallback
+    { "h264_videotoolbox",   AV_PIX_FMT_YUV420P },
+    { "libx264",      AV_PIX_FMT_YUV420P },
 };
 #endif
 
@@ -99,7 +97,6 @@ struct OutputService {
     int64_t last_dts_a = -1;
 
     OutputService() {
-        // Avviamo il thread che scriverà effettivamente su disco/rete
         worker_thread = std::thread(&OutputService::ServiceWorker, this);
     }
 
@@ -130,8 +127,6 @@ struct OutputService {
 
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
-            // Protezione: se la coda è troppo grande (es. rete bloccata), scarta i pacchetti
-            // per non esaurire la RAM. 100 frame è circa 1-2 secondi di buffer.
             if (packet_queue.size() > 100) {
                 AVPacket* old = packet_queue.front();
                 av_packet_free(&old);
@@ -157,7 +152,6 @@ private:
             }
 
             if (pkt) {
-                // Scrittura effettiva (bloccante, ma qui non disturba l'encoder)
                 std::lock_guard<std::mutex> lock(service_mutex);
                 int ret = av_interleaved_write_frame(fmt_ctx, pkt);
                 if (ret < 0) {
@@ -175,6 +169,9 @@ public:
     ~CAV_ENCODER();
 
     bool init(bool ndi_output,int width, int height, int video_bitrate,int audio_bitrate, int sampleRate, MultiChannelRingBuffer* audioBuf);
+
+    bool InitVulkanEncoderHW();
+
     bool init_vaapi_context(AVCodecContext* ctx);
     void addOutput(const std::string& url, const std::string& format);
     bool addStreamToContext(AVFormatContext* fmt_ctx, AVCodecContext* codec_ctx, AVStream** out_stream);
@@ -182,7 +179,12 @@ public:
     std::atomic<size_t> m_active_services_count{0};
 
     bool InitHW(VulkanContext *_ctx);
-    bool InitFramesContext(uint32_t frame_w,uint32_t frame_h);
+    bool InitFramesContext(uint32_t w, uint32_t h);
+
+    AVFrame *acquireEncodeVulkanFrame();
+
+    bool sendEncodeVulkanFrame(AVFrame *f, int64_t pts, uint64_t signaledValue);
+
     void pushFrame();
     void cleanup();
     AVFrame* WrapVulkanImageInAVFrame(const YUVVideoResources& res);
@@ -207,13 +209,6 @@ public:
     Json::Value getStatus();
     Json::Value getSupportedVideoCodec() const;
 
-
-    // Pool di slot RGB->YUV. Il renderer chiama acquireSlot() per riservare uno
-    // slot, poi registra/sottomette il dispatch RGB->YUV via RGB2YUVPipeline,
-    // e infine chiama submitSlot(slot, pts) per metterlo in coda all'encoder.
-    // submitSlot NON lancia il dispatch: presume che il renderer abbia gia'
-    // chiamato RGB2YUVPipeline::instance().submitAsync(*slot). Il videoLoop
-    // dell'encoder attende il fence dello slot, poi mappa i buffer in AVFrame.
     RGB2YUVSlotResources* acquireSlot();
     void submitSlot(RGB2YUVSlotResources* slot, int64_t pts_us);
     void releaseSlot(RGB2YUVSlotResources* slot);
@@ -281,6 +276,9 @@ private:
     void flush_encoders();
     std::atomic<int64_t> m_current_audio_pts_us{0};
 
+    AVBufferRef* hw_device_ctx = nullptr;
+    AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
+
     AVCodecContext* m_video_codec_ctx = nullptr;
     AVCodecContext* m_audio_codec_ctx = nullptr;
     AVStream* m_video_stream = nullptr;
@@ -334,6 +332,15 @@ private:
     std::atomic<bool> m_keyframe_requested{false};
 
     std::atomic<bool> m_has_webrtc_consumer{false};
+
+    std::atomic<bool>            m_use_vulkan_enc{false};
+    VkCommandPool                m_encCopyPool{VK_NULL_HANDLE};
+    std::vector<VkCommandBuffer> m_encCopyCmds;
+    std::vector<VkFence>         m_encCopyFences;
+    uint32_t                     m_encCopyIdx{0};
+    bool createCopyRing();
+    void destroyCopyRing();
+    bool encodeSlotVulkan(RGB2YUVSlotResources* slot);
 
 };
 

@@ -229,11 +229,17 @@ struct VulkanContext {
     VkCommandPool graphicsCommandPool{VK_NULL_HANDLE};
     VkCommandPool computeCommandPool{VK_NULL_HANDLE};
     VkCommandPool transferCommandPool{VK_NULL_HANDLE};
+    VkCommandPool decodeCommandPool{VK_NULL_HANDLE};
+
+    uint32_t   encodeQueueFamily { UINT32_MAX };
+    VkQueue    encodeQueue       { VK_NULL_HANDLE };
 
     VkCommandBuffer master_commandBuffers;
     std::vector<VkCommandBuffer> commandBuffers;
     VkDescriptorPool descriptorPool{VK_NULL_HANDLE};
     VkSampler defaultSampler = VK_NULL_HANDLE;
+
+
 
     //Mixer
     VkDescriptorSetLayout m_mixerDescriptorLayout;
@@ -243,9 +249,28 @@ struct VulkanContext {
     VkPipelineLayout m_yuvtorgbComputePipelineLayout;
     VkPipeline m_yuvtorgbComputePipeline;
 
+    /*
     std::mutex graphicsQueueMutex;
     std::mutex computeQueueMutex;
     std::mutex transferQueueMutex;
+    std::mutex decodeQueueMutex;
+    std::mutex encodeQueueMutex;
+
+    */
+
+    std::array<std::mutex, 32> _queueMutexByFamily;
+
+    std::mutex& queueMutex(uint32_t family) {
+        // family == UINT32_MAX (queue assente) -> slot 0, innocuo.
+        return _queueMutexByFamily[(family < 32u) ? family : 0u];
+    }
+
+    // Sostituti drop-in dei vecchi membri (cambiano solo da .xMutex a .xMutexRef()).
+    std::mutex& graphicsQueueMutexRef() { return queueMutex(graphicsQueueFamily); }
+    std::mutex& computeQueueMutexRef()  { return queueMutex(computeQueueFamily);  }
+    std::mutex& transferQueueMutexRef() { return queueMutex(transferQueueFamily); }
+    std::mutex& decodeQueueMutexRef()   { return queueMutex(decodeQueueFamily);   }
+    std::mutex& encodeQueueMutexRef()   { return queueMutex(encodeQueueFamily);   }
 
     std::vector<const char*> devExt;
 
@@ -259,10 +284,14 @@ struct VulkanContext {
     VkPhysicalDeviceVulkan11Features features11{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
     VkPhysicalDeviceSynchronization2Features sync2Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
 
+    VkPhysicalDeviceVideoMaintenance1FeaturesKHR videoMaint1{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR };
+
     // Helper
     bool hasDecodeQueue() const { return decodeQueue != VK_NULL_HANDLE; }
     bool hasDedicatedCompute() const { return computeQueueFamily != graphicsQueueFamily; }
     bool hasDedicatedTransfer() const { return transferQueueFamily != graphicsQueueFamily; }
+    bool hasDedicatedDecode() const { return decodeQueueFamily != graphicsQueueFamily; }
+    bool hasEncodeQueue() const { return encodeQueue != VK_NULL_HANDLE; }
 
     bool isNVIDIA = false;
 };

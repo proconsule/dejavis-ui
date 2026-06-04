@@ -61,7 +61,7 @@ Json::Value CRenderer::getRendererStatusJson() {
 
 
 
-#ifdef _WIN32
+#ifdef SPOUT2_ENABLED
     status["SPOUT2_SENDER_STATUS"] = spout2_sender_active.load();
     status["SPOUT2_SENDER_WIDTH"] = sender_SPOUT2.GetSenderWidth();
     status["SPOUT2_SENDER_HEIGHT"] = sender_SPOUT2.GetSenderHeight();

@@ -23,6 +23,7 @@ bool CAV_ENCODER::init(bool ndi_output,int width, int height, int video_bitrate,
         if (setupAudio(sampleRate, 2,audio_bitrate)) m_audio_enabled = true;
     }
 
+
     m_masterclock.reset_vis_time();
 
     m_t0_us.store(-1);
@@ -53,6 +54,132 @@ bool CAV_ENCODER::init(bool ndi_output,int width, int height, int video_bitrate,
     }
     m_watchdog_thread = std::thread(&CAV_ENCODER::connectionWatchdog, this);
 
+    return true;
+}
+
+/*
+static void enc_ff_vk_lock_queue(AVHWDeviceContext* ctx, uint32_t qf, uint32_t)
+{
+    auto* vk = static_cast<VulkanContext*>(ctx->user_opaque);
+
+    if      (qf == vk->graphicsQueueFamily) vk->graphicsQueueMutex.lock();
+    else if (qf == vk->computeQueueFamily)  vk->computeQueueMutex.lock();
+    else if (qf == vk->transferQueueFamily) vk->transferQueueMutex.lock();
+    else if (qf == vk->decodeQueueFamily)   vk->decodeQueueMutex.lock();  // <- da aggiungere
+}
+
+static void enc_ff_vk_unlock_queue(AVHWDeviceContext* ctx, uint32_t qf, uint32_t)
+{
+    auto* vk = static_cast<VulkanContext*>(ctx->user_opaque);
+    if      (qf == vk->graphicsQueueFamily) vk->graphicsQueueMutex.unlock();
+    else if (qf == vk->computeQueueFamily)  vk->computeQueueMutex.unlock();
+    else if (qf == vk->transferQueueFamily) vk->transferQueueMutex.unlock();
+    else if (qf == vk->decodeQueueFamily)   vk->decodeQueueMutex.unlock();
+}
+*/
+
+
+static void enc_ff_vk_lock_queue(AVHWDeviceContext* c, uint32_t qf, uint32_t){
+    static_cast<VulkanContext*>(c->user_opaque)->queueMutex(qf).lock();
+}
+
+static void enc_ff_vk_unlock_queue(AVHWDeviceContext* c, uint32_t qf, uint32_t){
+    static_cast<VulkanContext*>(c->user_opaque)->queueMutex(qf).unlock();
+}
+
+bool CAV_ENCODER::InitVulkanEncoderHW()
+{
+    if (!m_ctx || m_ctx->device == VK_NULL_HANDLE) {
+        DEJAVISUI_LOG_ERROR("[ENCODER] VulkanContext non valido");
+        return false;
+    }
+
+    hw_device_ctx = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VULKAN);
+    if (!hw_device_ctx) {
+        DEJAVISUI_LOG_ERROR("[ENCODER] av_hwdevice_ctx_alloc(VULKAN) fallito");
+        return false;
+    }
+
+    AVHWDeviceContext*     devCtx = reinterpret_cast<AVHWDeviceContext*>(hw_device_ctx->data);
+    AVVulkanDeviceContext* vkCtx  = reinterpret_cast<AVVulkanDeviceContext*>(devCtx->hwctx);
+
+    // Serve ai callback di lock per ritrovare i tuoi mutex.
+    devCtx->user_opaque = m_ctx;
+
+    // --- Handle base -----------------------------------------------------------
+    vkCtx->get_proc_addr = vkGetInstanceProcAddr;   // se usi volk, passa il loader di volk
+    vkCtx->alloc         = nullptr;
+    vkCtx->inst          = m_ctx->instance;
+    vkCtx->phys_dev      = m_ctx->physicalDevice;
+    vkCtx->act_dev       = m_ctx->device;
+
+    // --- Feature realmente abilitate al device-creation (con la sua pNext-chain)
+    vkCtx->device_features = m_ctx->deviceFeatures2;
+
+    vkCtx->enabled_inst_extensions    = nullptr;
+    vkCtx->nb_enabled_inst_extensions = 0;
+
+    vkCtx->enabled_dev_extensions     = m_ctx->devExt.data();    // deve restare vivo
+    vkCtx->nb_enabled_dev_extensions  = (int)m_ctx->devExt.size();
+
+    // --- Queue families (qf[] = via principale su FFmpeg >= 6.1) ---------------
+    int n = 0;
+    auto addQF = [&](uint32_t idx, int num, VkQueueFlagBits flags,
+                     VkVideoCodecOperationFlagBitsKHR vcaps)
+    {
+        if (idx == UINT32_MAX || n >= 64) return;
+        vkCtx->qf[n].idx        = (int)idx;
+        vkCtx->qf[n].num        = num;
+        vkCtx->qf[n].flags      = flags;
+        vkCtx->qf[n].video_caps = vcaps;
+        ++n;
+    };
+
+
+
+    addQF(m_ctx->graphicsQueueFamily, 1, VK_QUEUE_GRAPHICS_BIT,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+    addQF(m_ctx->computeQueueFamily,  1, VK_QUEUE_COMPUTE_BIT,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+    addQF(m_ctx->transferQueueFamily, 1, VK_QUEUE_TRANSFER_BIT,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+    addQF(m_ctx->encodeQueueFamily,   1, VK_QUEUE_VIDEO_ENCODE_BIT_KHR,
+          (VkVideoCodecOperationFlagBitsKHR)(
+              VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR |
+              VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR));
+    vkCtx->nb_qf = n;
+
+
+#if FF_API_VULKAN_FIXED_QUEUES
+    vkCtx->queue_family_index        = (int)m_ctx->graphicsQueueFamily; vkCtx->nb_graphics_queues = 1;
+    vkCtx->queue_family_tx_index     = (int)m_ctx->transferQueueFamily; vkCtx->nb_tx_queues       = 1;
+    vkCtx->queue_family_comp_index   = (int)m_ctx->computeQueueFamily;  vkCtx->nb_comp_queues     = 1;
+    vkCtx->queue_family_encode_index = -1;                              vkCtx->nb_encode_queues   = 0;
+    if (m_ctx->encodeQueueFamily != UINT32_MAX) {
+        vkCtx->queue_family_encode_index = (int)m_ctx->encodeQueueFamily;
+        vkCtx->nb_encode_queues          = 1;
+    } else {
+        vkCtx->queue_family_encode_index = -1;
+        vkCtx->nb_encode_queues          = 0;
+    }
+#endif
+
+    // --- Lock condiviso con il renderer ---------------------------------------
+    vkCtx->lock_queue   = enc_ff_vk_lock_queue;
+    vkCtx->unlock_queue = enc_ff_vk_unlock_queue;
+
+    // --- Init: FFmpeg adotta il tuo device ------------------------------------
+    int err = av_hwdevice_ctx_init(hw_device_ctx);
+    if (err < 0) {
+        char e[256]; av_strerror(err, e, sizeof(e));
+        DEJAVISUI_LOG_ERROR("[ENCODER] av_hwdevice_ctx_init(VULKAN) fallito: %s", e);
+        av_buffer_unref(&hw_device_ctx);   // -> nullptr
+        return false;
+    }
+
+    hw_pix_fmt = AV_PIX_FMT_VULKAN;
+    m_hw_device_ref = hw_device_ctx;
+    DEJAVISUI_LOG_DEBUG("[ENCODER] FFmpeg Vulkan HW pronto sul device condiviso");
     return true;
 }
 
@@ -353,10 +480,28 @@ bool CAV_ENCODER::TryVideoEncoder(std::string name,int width, int height, int bi
     ctx->keyint_min   = 60;
     ctx->max_b_frames = 0;
     ctx->pix_fmt      = pf;
-    ctx->profile      = AV_PROFILE_H264_CONSTRAINED_BASELINE;
+    ctx->profile      = AV_PROFILE_H264_HIGH;
 
-    // Opzioni per encoder (se vuoi raffinare per ognuno)
     const std::string nm = name;
+    if (nm == "h264_vulkan") {
+        if (m_ctx->encodeQueueFamily == UINT32_MAX || !m_hw_device_ref) {
+            avcodec_free_context(&ctx); return false;   // nessun encode Vulkan
+        }
+        if (!InitFramesContext(width, height)) { avcodec_free_context(&ctx); return false; }
+        ctx->pix_fmt       = AV_PIX_FMT_VULKAN;
+        ctx->sw_pix_fmt    = AV_PIX_FMT_NV12;
+        ctx->hw_device_ctx = av_buffer_ref(m_hw_device_ref);
+        ctx->hw_frames_ctx = av_buffer_ref(m_hw_frames_ref);
+        int r = avcodec_open2(ctx, codec, nullptr);
+        if (r < 0) { char e[256]; av_strerror(r,e,sizeof(e));
+            DEJAVISUI_LOG_ERROR("[ENCODER] %s open failed: %s", nm.c_str(), e);
+            avcodec_free_context(&ctx); return false; }
+        m_use_vulkan_enc = true;
+        if (!createCopyRing()) { avcodec_free_context(&ctx); return false; }
+        *outCtx = ctx; *outPixFmt = AV_PIX_FMT_VULKAN;
+        DEJAVISUI_LOG_INFO("[ENCODER] %s opened OK (zero-copy)", nm.c_str());
+        return true;
+    }
     if (nm == "h264_nvenc") {
         av_opt_set    (ctx->priv_data, "preset",      "p1",       0);
         av_opt_set    (ctx->priv_data, "tune",        "ull",      0);
@@ -411,55 +556,15 @@ bool CAV_ENCODER::TryVideoEncoder(std::string name,int width, int height, int bi
 
 bool CAV_ENCODER::setupVideo(int width, int height, int bitrate) {
 
-#ifdef __APPLE__
-    /*
-    const AVCodec* codec = avcodec_find_encoder_by_name("h264_videotoolbox");
-
-    if (!codec) {
-        codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-        DEJAVISUI_LOG_ERROR("FALLBACK TO libx264");
-    }else {
-        DEJAVISUI_LOG_INFO("Using h264_videotoolbox");
-    }
-    m_video_codec_ctx = avcodec_alloc_context3(codec);
-    m_video_codec_ctx->pix_fmt = AV_PIX_FMT_NV12;
-
-    m_video_codec_ctx->width          = width;
-    m_video_codec_ctx->height         = height;
-    m_video_codec_ctx->time_base      = {1, 1000000};
-    m_video_codec_ctx->framerate      = {60, 1};
-    m_video_codec_ctx->bit_rate       = bitrate;
-    //m_video_codec_ctx->rc_max_rate    = bitrate;
-    //m_video_codec_ctx->rc_buffer_size = bitrate;
-    m_video_codec_ctx->gop_size       = 60;
-    m_video_codec_ctx->keyint_min     = 60;
-    m_video_codec_ctx->max_b_frames   = 0;
-    m_video_codec_ctx->profile        = AV_PROFILE_H264_CONSTRAINED_BASELINE;
-    m_video_codec_ctx->flags         &= ~AV_CODEC_FLAG_GLOBAL_HEADER;
-
-    av_opt_set(m_video_codec_ctx->priv_data, "realtime", "1", 0);
-    av_opt_set(m_video_codec_ctx->priv_data, "profile", "baseline", 0);
-
-
-
-    if (avcodec_open2(m_video_codec_ctx, codec, nullptr) >= 0) {
-        DEJAVISUI_LOG_DEBUG("Software/HW encoder %s ready: %dx%d @ %d kbps",
-                            codec ? codec->name : "unknown",
-                            width, height, bitrate / 1000);
-        return true;
-    }
-    return false;
-    */
-    for (const auto& cand : kCandidates) {
-        if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
-    }
-    return true;
-#else
-    for (const auto& cand : kCandidates) {
-        if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
-    }
-    return true;
+#ifndef __APPLE__
+    InitVulkanEncoderHW();
 #endif
+    for (const auto& cand : kCandidates) {
+        if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
+    }
+
+    return true;
+
 
 }
 
@@ -671,73 +776,67 @@ void CAV_ENCODER::videoLoop() {
             slot = m_ready_slots.front();
             m_ready_slots.pop_front();
         }
+#ifndef __APPLE__
         VkResult fr = vkWaitForFences(m_ctx->device, 1, &slot->fence,
                                       VK_TRUE, 500'000'000ull);
         if (fr != VK_SUCCESS) {
             DEJAVISUI_LOG_ERROR("[VIDEO] vkWaitForFences fallita: %d", (int)fr);
-            // Rimetti lo slot fra i free e skippa il frame.
             std::lock_guard<std::mutex> lock(m_queue_mutex);
             m_free_slots.push_back(slot);
             continue;
         }
-
+#endif
         std::vector<VkSemaphore> drained;
         RGB2YUVPipeline::drainPendingSemaphores(*slot, drained);
 
-
-        AVFrame* encode_frame = nullptr;
-
-        if (m_use_vaapi) {
-            AVFrame* sw_frame = av_frame_alloc();
-            sw_frame->format = (slot->format == RGB2YUVFormat::NV12)
-                               ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
-            sw_frame->width  = m_width;
-            sw_frame->height = m_height;
-            int planes = (slot->format == RGB2YUVFormat::NV12) ? 2 : 3;
-            for (int i = 0; i < planes; i++) {
-                sw_frame->data[i]     = (uint8_t*)slot->mappedPtrs[i];
-                sw_frame->linesize[i] = (int)slot->strides[i];
-            }
-
-            encode_frame = av_frame_alloc();
-            if (av_hwframe_get_buffer(m_video_codec_ctx->hw_frames_ctx, encode_frame, 0) < 0) {
-                av_frame_free(&sw_frame);
-                av_frame_free(&encode_frame);
-                std::lock_guard<std::mutex> lock(m_queue_mutex);
-                m_free_slots.push_back(slot);
-                continue;
-            }
-            av_hwframe_transfer_data(encode_frame, sw_frame, 0);
-            av_frame_free(&sw_frame);
+        if (m_use_vulkan_enc.load(std::memory_order_acquire)) {
+            encodeSlotVulkan(slot);    // copia + signal + send + receive
         } else {
-            encode_frame = av_frame_alloc();
-            encode_frame->format = m_video_codec_ctx->pix_fmt;
-            encode_frame->width  = m_width;
-            encode_frame->height = m_height;
-            int planes = (slot->format == RGB2YUVFormat::NV12) ? 2 : 3;
-            for (int i = 0; i < planes; i++) {
-                encode_frame->data[i]     = (uint8_t*)slot->mappedPtrs[i];
-                encode_frame->linesize[i] = (int)slot->strides[i];
+
+            AVFrame* encode_frame = nullptr;
+            if (m_use_vaapi) {
+                AVFrame* sw_frame = av_frame_alloc();
+                sw_frame->format = (slot->format == RGB2YUVFormat::NV12)
+                                   ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
+                sw_frame->width  = m_width;
+                sw_frame->height = m_height;
+                int planes = (slot->format == RGB2YUVFormat::NV12) ? 2 : 3;
+                for (int i = 0; i < planes; i++) {
+                    sw_frame->data[i]     = (uint8_t*)slot->mappedPtrs[i];
+                    sw_frame->linesize[i] = (int)slot->strides[i];
+                }
+
+                encode_frame = av_frame_alloc();
+                if (av_hwframe_get_buffer(m_video_codec_ctx->hw_frames_ctx, encode_frame, 0) < 0) {
+                    av_frame_free(&sw_frame);
+                    av_frame_free(&encode_frame);
+                    std::lock_guard<std::mutex> lock(m_queue_mutex);
+                    m_free_slots.push_back(slot);
+                    continue;
+                }
+                av_hwframe_transfer_data(encode_frame, sw_frame, 0);
+                av_frame_free(&sw_frame);
+            } else {
+                encode_frame = av_frame_alloc();
+                encode_frame->format = m_video_codec_ctx->pix_fmt;
+                encode_frame->width  = m_width; encode_frame->height = m_height;
+                int planes = (slot->format == RGB2YUVFormat::NV12) ? 2 : 3;
+                for (int i=0;i<planes;i++){ encode_frame->data[i]=(uint8_t*)slot->mappedPtrs[i];
+                                            encode_frame->linesize[i]=(int)slot->strides[i]; }
             }
-        }
-
-
-
-        encode_frame->pts = slot->pts_us;
-        if (m_keyframe_requested.exchange(false, std::memory_order_acquire)) {
-            encode_frame->pict_type = AV_PICTURE_TYPE_I;
-            encode_frame->flags |= AV_FRAME_FLAG_KEY;
-        }
-        if (avcodec_send_frame(m_video_codec_ctx, encode_frame) >= 0) {
-            AVPacket* pkt = av_packet_alloc();
-            while (avcodec_receive_packet(m_video_codec_ctx, pkt) >= 0) {
-                pushToServices(pkt, true);
-                av_packet_unref(pkt);
+            encode_frame->pts = slot->pts_us;
+            if (m_keyframe_requested.exchange(false)) { encode_frame->pict_type=AV_PICTURE_TYPE_I;
+                                                        encode_frame->flags|=AV_FRAME_FLAG_KEY; }
+            if (avcodec_send_frame(m_video_codec_ctx, encode_frame) >= 0) {
+                AVPacket* pkt = av_packet_alloc();
+                while (avcodec_receive_packet(m_video_codec_ctx, pkt) >= 0) {
+                    pushToServices(pkt, true); av_packet_unref(pkt);
+                }
+                av_packet_free(&pkt);
             }
-            av_packet_free(&pkt);
+            av_frame_free(&encode_frame);
         }
 
-        av_frame_free(&encode_frame);
         if (ndi_enabled) {
             m_ndi_sender.SendMuxedFrame(*slot);
         }
@@ -847,6 +946,11 @@ void CAV_ENCODER::cleanup() {
         std::lock_guard<std::mutex> q_lock(m_queue_mutex);
         while(!m_frame_queue.empty()) m_frame_queue.pop();
     }
+
+    destroyCopyRing();
+    if (m_hw_frames_ref) av_buffer_unref(&m_hw_frames_ref);
+    if (hw_device_ctx)   av_buffer_unref(&hw_device_ctx);
+    m_hw_device_ref = nullptr;
 
     releaseSlotPool();
     DEJAVISUI_LOG_DEBUG("Shutdown completato con successo.\n");
@@ -1005,6 +1109,185 @@ void CAV_ENCODER::setEncodedPacketCallback(EncodedPacketCallback cb) {
 
 void CAV_ENCODER::requestKeyframe() {
     m_keyframe_requested.store(true, std::memory_order_release);
+}
+
+
+bool CAV_ENCODER::InitFramesContext(uint32_t w, uint32_t h) {
+    m_hw_frames_ref = av_hwframe_ctx_alloc(m_hw_device_ref);   // device Vulkan condiviso
+    if (!m_hw_frames_ref) return false;
+
+    auto* fc = reinterpret_cast<AVHWFramesContext*>(m_hw_frames_ref->data);
+    fc->format    = AV_PIX_FMT_VULKAN;
+    fc->sw_format  = AV_PIX_FMT_NV12;
+    fc->width      = w;
+    fc->height     = h;
+    fc->initial_pool_size = SLOT_COUNT;
+
+    auto* vkfc = reinterpret_cast<AVVulkanFramesContext*>(fc->hwctx);
+
+    vkfc->usage = (VkImageUsageFlagBits)(VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+
+    if (av_hwframe_ctx_init(m_hw_frames_ref) < 0) {
+        av_buffer_unref(&m_hw_frames_ref);
+        return false;
+    }
+    return true;
+}
+
+AVFrame* CAV_ENCODER::acquireEncodeVulkanFrame() {
+    AVFrame* f = av_frame_alloc();
+    if (av_hwframe_get_buffer(m_hw_frames_ref, f, 0) < 0) {
+        av_frame_free(&f);
+        return nullptr;
+    }
+    return f;
+}
+
+bool CAV_ENCODER::sendEncodeVulkanFrame(AVFrame* f, int64_t pts, uint64_t signaledValue) {
+    auto* fc   = reinterpret_cast<AVHWFramesContext*>(f->hw_frames_ctx->data);
+    auto* vkfc = reinterpret_cast<AVVulkanFramesContext*>(fc->hwctx);
+    auto* vkf  = reinterpret_cast<AVVkFrame*>(f->data[0]);
+    const int P = 0;
+
+    if (vkfc->lock_frame) vkfc->lock_frame(fc, vkf);
+    vkf->layout[P]    = VK_IMAGE_LAYOUT_GENERAL;          // o il layout in cui l'hai lasciata
+    vkf->access[P]    = VK_ACCESS_SHADER_WRITE_BIT;
+    vkf->sem_value[P] = signaledValue;                    // l'encoder aspetta questo
+    if (vkfc->unlock_frame) vkfc->unlock_frame(fc, vkf);
+
+    f->pts = pts;
+    int r = avcodec_send_frame(m_video_codec_ctx, f);
+    av_frame_free(&f);   // l'encoder ha preso i suoi ref; il pool ricicla via sem
+    return r >= 0;
+}
+
+bool CAV_ENCODER::createCopyRing() {
+    const uint32_t N = SLOT_COUNT + 1;
+    VkCommandPoolCreateInfo pci{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+    pci.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    pci.queueFamilyIndex = m_ctx->transferQueueFamily;
+    if (vkCreateCommandPool(m_ctx->device, &pci, nullptr, &m_encCopyPool) != VK_SUCCESS) return false;
+
+    m_encCopyCmds.resize(N);
+    VkCommandBufferAllocateInfo ai{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+    ai.commandPool = m_encCopyPool; ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; ai.commandBufferCount = N;
+    if (vkAllocateCommandBuffers(m_ctx->device, &ai, m_encCopyCmds.data()) != VK_SUCCESS) return false;
+
+    m_encCopyFences.resize(N);
+    for (uint32_t i = 0; i < N; ++i) {
+        VkFenceCreateInfo fci{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        vkCreateFence(m_ctx->device, &fci, nullptr, &m_encCopyFences[i]);
+    }
+    return true;
+}
+
+void CAV_ENCODER::destroyCopyRing() {
+    if (!m_ctx || !m_ctx->device) return;
+    for (auto f : m_encCopyFences) if (f) vkDestroyFence(m_ctx->device, f, nullptr);
+    m_encCopyFences.clear();
+    if (m_encCopyPool) { vkDestroyCommandPool(m_ctx->device, m_encCopyPool, nullptr); m_encCopyPool = VK_NULL_HANDLE; }
+    m_encCopyCmds.clear();
+}
+
+bool CAV_ENCODER::encodeSlotVulkan(RGB2YUVSlotResources* slot) {
+    AVFrame* f = acquireEncodeVulkanFrame();
+    if (!f) return false;
+
+    auto* fc   = reinterpret_cast<AVHWFramesContext*>(f->hw_frames_ctx->data);
+    auto* vkfc = reinterpret_cast<AVVulkanFramesContext*>(fc->hwctx);
+    auto* vkf  = reinterpret_cast<AVVkFrame*>(f->data[0]);
+    const int P = 0;
+
+    const uint32_t idx = m_encCopyIdx;
+    m_encCopyIdx = (m_encCopyIdx + 1) % (uint32_t)m_encCopyCmds.size();
+    VkCommandBuffer cmd   = m_encCopyCmds[idx];
+    VkFence         fence = m_encCopyFences[idx];
+
+    vkWaitForFences(m_ctx->device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(m_ctx->device, 1, &fence);
+    vkResetCommandBuffer(cmd, 0);
+
+    VkCommandBufferBeginInfo bi{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &bi);
+
+    VkImageMemoryBarrier toDst{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    toDst.oldLayout = vkf->layout[P];
+    toDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toDst.srcAccessMask = (VkAccessFlags)vkf->access[P];
+    toDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toDst.image = vkf->img[P];
+    toDst.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         0,0,nullptr,0,nullptr,1,&toDst);
+
+    // buffers[0]=Y (R8), buffers[1]=UV (R8G8). strides[] in byte.
+    VkBufferImageCopy yReg{};
+    yReg.bufferRowLength  = (uint32_t)slot->strides[0];
+    yReg.imageSubresource = { VK_IMAGE_ASPECT_PLANE_0_BIT, 0, 0, 1 };
+    yReg.imageExtent      = { (uint32_t)m_width, (uint32_t)m_height, 1 };
+    vkCmdCopyBufferToImage(cmd, slot->buffers[0], vkf->img[P],
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &yReg);
+
+    VkBufferImageCopy uvReg{};
+    uvReg.bufferRowLength  = (uint32_t)(slot->strides[1] / 2);   // texel R8G8 = byte/2
+    uvReg.imageSubresource = { VK_IMAGE_ASPECT_PLANE_1_BIT, 0, 0, 1 };
+    uvReg.imageExtent      = { (uint32_t)m_width / 2, (uint32_t)m_height / 2, 1 };
+    vkCmdCopyBufferToImage(cmd, slot->buffers[1], vkf->img[P],
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &uvReg);
+
+    VkImageMemoryBarrier toGen = toDst;
+    toGen.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toGen.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    toGen.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toGen.dstAccessMask = 0;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                         0,0,nullptr,0,nullptr,1,&toGen);
+
+    vkEndCommandBuffer(cmd);
+
+    const uint64_t signalVal = vkf->sem_value[P] + 1;
+    VkTimelineSemaphoreSubmitInfo tl{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+    tl.signalSemaphoreValueCount = 1; tl.pSignalSemaphoreValues = &signalVal;
+
+    VkSubmitInfo si{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    si.pNext = &tl;
+    si.commandBufferCount = 1; si.pCommandBuffers = &cmd;
+    si.signalSemaphoreCount = 1; si.pSignalSemaphores = &vkf->sem[P];
+
+    if (vkfc->lock_frame) vkfc->lock_frame(fc, vkf);
+    VkResult sr;
+    {
+        std::lock_guard<std::mutex> qlk(m_ctx->transferQueueMutexRef());
+        sr = vkQueueSubmit(m_ctx->transferQueue, 1, &si, fence);
+    }
+    if (sr == VK_SUCCESS) {
+        vkf->layout[P]    = VK_IMAGE_LAYOUT_GENERAL;
+        vkf->access[P]    = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkf->sem_value[P] = signalVal;
+    }
+    if (vkfc->unlock_frame) vkfc->unlock_frame(fc, vkf);
+    if (sr != VK_SUCCESS) { av_frame_free(&f); return false; }
+
+    f->pts = slot->pts_us;
+    if (m_keyframe_requested.exchange(false, std::memory_order_acquire)) {
+        f->pict_type = AV_PICTURE_TYPE_I;
+        f->flags    |= AV_FRAME_FLAG_KEY;
+    }
+    int r = avcodec_send_frame(m_video_codec_ctx, f);
+    av_frame_free(&f);
+    if (r < 0) return false;
+
+    AVPacket* pkt = av_packet_alloc();
+    while (avcodec_receive_packet(m_video_codec_ctx, pkt) >= 0) {
+        pushToServices(pkt, true);
+        av_packet_unref(pkt);
+    }
+    av_packet_free(&pkt);
+    return true;
 }
 
 Json::Value CAV_ENCODER::getStatus() {

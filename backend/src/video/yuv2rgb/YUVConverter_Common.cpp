@@ -35,7 +35,7 @@ bool createMappedStorageBuffer(VulkanContext* ctx,
                                VkDeviceSize&   outActualSize) {
     VkBufferCreateInfo bi{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
     bi.size        = size;
-    bi.usage       = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bi.usage       = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     if (vkCreateBuffer(ctx->device, &bi, nullptr, &outBuffer) != VK_SUCCESS) {
         return false;

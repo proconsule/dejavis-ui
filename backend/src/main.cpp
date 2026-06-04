@@ -34,9 +34,7 @@ extern "C" {
 #include "audio/macos_permissions.h"
 #endif
 
-#ifndef __linux__
-#include <nfd.hpp>
-#endif
+
 CRenderer Renderer;
 CAudio Audio;
 CAV_ENCODER AV_Encoder;
@@ -142,7 +140,7 @@ int main(int argc, char* argv[]) {
         Renderer.fileplayers_basepath = video_config["file_path"].asString();
     }
 
-
+    av_log_set_level(AV_LOG_VERBOSE);
 
     Renderer.Init_Core(video_config["gpu_idx"].asInt(),video_config["core_w"].asInt(),video_config["core_h"].asInt());
     VulkanLog::Init(Renderer.m_ctx.instance,Renderer.m_ctx.device,"DEJAVISUI");
@@ -171,7 +169,6 @@ int main(int argc, char* argv[]) {
 
     AV_Encoder.InitHW(&Renderer.m_ctx);
     AV_Encoder.init(ndi_out_config["enabled"].asBool(),Renderer.core_w,Renderer.core_h,srt_out_config["video_bitrate"].asInt(),srt_out_config["audio_bitrate"].asInt(),Audio.AUDIO_MIXER.master_samplerate,&Audio.srtLiveBuffer_planar);
-
     Audio.av_ndi_sender = &AV_Encoder.m_ndi_sender;
 
     Renderer.InitRGB2YUV();

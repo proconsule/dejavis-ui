@@ -148,7 +148,7 @@ void CRenderer::GLFW_Vulkan_Submit(VkCommandBuffer cmd, uint32_t imageIndex, uin
 
     VkResult submitRes;
     {
-        std::lock_guard<std::mutex> qlock(m_ctx.graphicsQueueMutex);
+        std::lock_guard<std::mutex> qlock(m_ctx.graphicsQueueMutexRef());
         submitRes = vkQueueSubmit(m_ctx.graphicsQueue, 1, &submitInfo,
                                   m_display.inFlightFences[syncIndex]);
     }
@@ -182,7 +182,7 @@ void CRenderer::GLFW_Vulkan_Submit(VkCommandBuffer cmd, uint32_t imageIndex, uin
 
     VkResult presentRes;
     {
-        std::lock_guard<std::mutex> qlock(m_ctx.graphicsQueueMutex);
+        std::lock_guard<std::mutex> qlock(m_ctx.graphicsQueueMutexRef());
         presentRes = vkQueuePresentKHR(m_ctx.graphicsQueue, &presentInfo);
     }
 

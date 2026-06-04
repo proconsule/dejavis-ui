@@ -397,7 +397,7 @@ bool RGB2YUVPipeline::createBuffers(RGB2YUVSlotResources& slot) {
     for (int i = 0; i < 3; i++) {
         VkBufferCreateInfo bi{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         bi.size        = sizes[i];
-        bi.usage       = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        bi.usage       = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT| VK_BUFFER_USAGE_TRANSFER_SRC_BIT;;
         bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         if (vkCreateBuffer(m_ctx->device, &bi, nullptr, &slot.buffers[i]) != VK_SUCCESS) {
             DEJAVISUI_LOG_ERROR("[RGB2YUV] vkCreateBuffer[%d] failed", i);
@@ -728,11 +728,13 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
         }
     }
 
+#ifndef __APPLE__
     VkResult waitRes = vkWaitForFences(m_ctx->device, 1, &slot.fence, VK_TRUE, 1'000'000'000);
     if (waitRes != VK_SUCCESS) {
         DEJAVISUI_LOG_ERROR("[RGB2YUV] vkWaitForFences: %d", waitRes);
         return;
     }
+#endif
     vkResetFences(m_ctx->device, 1, &slot.fence);
 
     // Update descriptor (sicuro adesso: fence già atteso).
@@ -761,13 +763,41 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
     slot.semWriteIdx = (slot.semWriteIdx + 1) % RGB2YUVSlotResources::kSemRing;
     slot.computeFinished = signalSem;
 
-    // === Setup wait/signal con mix di timeline (mixerTimeline) e binari ===
-    //
-    // Wait:   timeline mixerTimeline @ waitTimelineValue   (se != 0)
-    // Signal: ring binario signalSem
-    //
-    // Il timelineSubmitInfo serve a passare i valori uint64 per i semafori
-    // timeline. Per i binari (signalSem) il valore è ignorato — passiamo 0.
+    bool gpuWait = (waitTimelineValue != 0);
+#ifdef __APPLE__
+    gpuWait = true; // We want the GPU to wait, but NOT the CPU.
+#endif
+    /*
+#ifdef __APPLE__
+    if (waitTimelineValue != 0) {
+        VkSemaphoreWaitInfo wi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+        wi.semaphoreCount = 1;
+        wi.pSemaphores    = &slot.mixerTimeline;
+        wi.pValues        = &waitTimelineValue;
+
+        // Leggi il valore corrente PRIMA del wait, per diagnosi.
+        uint64_t cur = 0;
+        vkGetSemaphoreCounterValue(m_ctx->device, slot.mixerTimeline, &cur);
+        DEJAVISUI_LOG_DEBUG("[RGB2YUV][mac] attendo timeline %llu (ora=%llu)",
+                            (unsigned long long)waitTimelineValue,
+                            (unsigned long long)cur);
+
+        VkResult wr = vkWaitSemaphores(m_ctx->device, &wi, 1'000'000'000ull);
+        if (wr != VK_SUCCESS) {
+            // SE vedi questo: il render submit NON ha firmato il timeline ->
+            // e' il mix binario+timeline che MoltenVK non gestisce. (vedi sotto)
+            uint64_t after = 0;
+            vkGetSemaphoreCounterValue(m_ctx->device, slot.mixerTimeline, &after);
+            DEJAVISUI_LOG_ERROR("[RGB2YUV][mac] timeline NON firmato: wr=%d valore=%llu (atteso %llu)",
+                                wr, (unsigned long long)after,
+                                (unsigned long long)waitTimelineValue);
+            vkResetFences(m_ctx->device, 1, &slot.fence);
+            return;
+        }
+        gpuWait = false;   // gia' atteso sull'host
+    }
+#endif
+    */
     VkSemaphore          waitSems[1]   = { slot.mixerTimeline };
     uint64_t             waitValues[1] = { waitTimelineValue };
     VkPipelineStageFlags waitStages[1] = { waitStage };
@@ -787,17 +817,16 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
     si.signalSemaphoreCount = 0;
     si.pSignalSemaphores    = nullptr;
 
-    if (waitTimelineValue != 0) {
+    if (gpuWait) {
         timelineInfo.waitSemaphoreValueCount = 1;
         timelineInfo.pWaitSemaphoreValues    = waitValues;
-
         si.waitSemaphoreCount = 1;
         si.pWaitSemaphores    = waitSems;
         si.pWaitDstStageMask  = waitStages;
     }
 
     {
-        std::lock_guard<std::mutex> qlock(m_ctx->computeQueueMutex);
+        std::lock_guard<std::mutex> qlock(m_ctx->computeQueueMutexRef());
         VkResult r = VulkanQueueSubmit(m_ctx->computeQueue, 1, &si, slot.fence,"RGB2YUVPipeline::submitAsync");
         if (r != VK_SUCCESS) {
             DEJAVISUI_LOG_ERROR("[RGB2YUV] vkQueueSubmit: %d", r);

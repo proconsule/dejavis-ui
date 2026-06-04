@@ -6,9 +6,11 @@ extern "C" {
 #include <libavutil/frame.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/samplefmt.h>
+#include <libavutil/mathematics.h>   // av_rescale_rnd / av_rescale
 }
 
 #include <algorithm>
+#include <vector>
 
 #ifdef NDI_ENABLED
     #include <Processing.NDI.Lib.h>
@@ -32,6 +34,10 @@ public:
 
     AVFrame* processFromAVFrame(AVFrame* frame);
 
+    // Drains the samples still buffered inside swr at end-of-stream.
+    // Call repeatedly until it returns nullptr.
+    AVFrame* flush();
+
 #ifdef NDI_ENABLED
     AVFrame* processFromNDI(NDIlib_audio_frame_v2_t* aframe);
 #endif
@@ -41,9 +47,11 @@ public:
     int      getOutputSamples() const { return m_out_frame ? m_out_frame->nb_samples : 0; }
     bool     isOutputPlanar()   const { return av_sample_fmt_is_planar(m_out_fmt) == 1; }
 
+    // Works for any channel count (uses extended_data, not just the first 8).
     float* getOutputChannel(int ch = 0) const {
-        if (!m_out_frame || ch < 0 || ch >= AV_NUM_DATA_POINTERS) return nullptr;
-        return (float*)m_out_frame->data[ch];
+        if (!m_out_frame || !m_out_frame->extended_data) return nullptr;
+        if (ch < 0 || ch >= m_out_frame->ch_layout.nb_channels) return nullptr;
+        return (float*)m_out_frame->extended_data[ch];
     }
 
     int            getInputChannels()  const { return m_in_ch; }
@@ -57,13 +65,17 @@ public:
 
 private:
     bool prepare_output_frame(int samples_required);
-    int  convert_internal(const uint8_t* const* in_data, int in_samples);
+    int  convert_internal(const uint8_t** in_data, int in_samples);
 
     SwrContext* m_swr_ctx   = nullptr;
     AVFrame*    m_out_frame = nullptr;
 
     AVChannelLayout m_in_layout{};
     AVChannelLayout m_out_layout{};
+
+    // Scratch array for the input plane pointers (sized to the channel count,
+    // so it also works for > 8 planar channels).
+    std::vector<const uint8_t*> m_in_ptrs;
 
     int m_in_rate = 0,  m_out_rate = 0;
     int m_in_ch   = 0,  m_out_ch   = 0;

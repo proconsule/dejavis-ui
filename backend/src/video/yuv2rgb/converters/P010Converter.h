@@ -18,9 +18,12 @@ public:
     bool uploadFrame(IConverterSlot* slot, AVFrame* f) override;
     bool uploadNDIFrame(IConverterSlot* slot, const NDIlib_video_frame_v2_t& v) override;
 
+    bool recordUploadFromVulkanImage(VkCommandBuffer cmd, IConverterSlot *slot, VkImage srcImg, VkImageLayout srcLayout,
+                                     VkAccessFlags srcAccess, uint32_t w, uint32_t h) override;
+
     void recordDispatch(VkCommandBuffer cmd, IConverterSlot* slot,
-                                   const FrameMetadata& meta,
-                                   VkImageLayout& outCurrentLayout) override;
+                        const FrameMetadata& meta,
+                        VkImageLayout& outCurrentLayout) override;
 
 private:
     VulkanContext*        m_ctx            = nullptr;

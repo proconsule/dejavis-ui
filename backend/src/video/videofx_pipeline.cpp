@@ -584,7 +584,7 @@ void VideoFXPipeline::submitAsync(VideoFXSlotResources& slot,
     //   stage1 (tracked → GENERAL), final (tracked → GENERAL), dispatch,
     //   final (GENERAL → SHADER_READ_ONLY_OPTIMAL).
     // Usa solo stage COMPUTE_SHADER_BIT / BOTTOM_OF_PIPE_BIT, validi su compute queue.
-    recordDispatch(cmd, slot);
+    //recordDispatch(cmd, slot);
 
     vkEndCommandBuffer(cmd);
 
@@ -604,7 +604,7 @@ void VideoFXPipeline::submitAsync(VideoFXSlotResources& slot,
     si.pSignalSemaphores    = &slot.signalSemaphore;
 
     {
-        std::lock_guard<std::mutex> qlock(m_ctx->computeQueueMutex);
+        std::lock_guard<std::mutex> qlock(m_ctx->computeQueueMutexRef());
         if (vkQueueSubmit(m_ctx->computeQueue, 1, &si, slot.fence) != VK_SUCCESS) {
             DEJAVISUI_LOG_ERROR("Submit FX fallito!");
             return;

@@ -55,7 +55,7 @@ static int audioOutputCallback(const void *inputBuffer, void *outputBuffer,
         AudioMixerOutputItem * mixer_output_item = (AudioMixerOutputItem *)userData;
         float* out = static_cast<float*>(outputBuffer);
 
-        if (mixer_output_item->buffer->getAvailableRead() >= framesPerBuffer * 2) {
+        if (mixer_output_item->buffer->getAvailableRead() >= framesPerBuffer * mixer_output_item->channels) {
             mixer_output_item->buffer->read(out, framesPerBuffer * mixer_output_item->channels);
         } else {
             std::fill_n(out, framesPerBuffer * mixer_output_item->channels, 0.0f);
@@ -341,6 +341,7 @@ bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _sampler
     outputParams.hostApiSpecificStreamInfo = nullptr;
 
     Pa_OpenStream(&outputStream, nullptr, &outputParams, _samplerate, 256, paClipOff, audioOutputCallback, AUDIO_MIXER.getMixerOutputItem(0));
+    DEJAVISUI_LOG_INFO("Opening %s, using %d hz , channels: %d",outputDevices[deviceId].name.c_str(),_samplerate,_channels);
     return Pa_StartStream(outputStream) == paNoError;
 }
 
@@ -427,6 +428,8 @@ void CAudio::processMasterOutSamples(std::vector<float>& _block, bool* _dataproc
     if (av_ndi_sender) {
         av_ndi_sender->PushAudio(reinterpret_cast<const float* const*>(tempIn),frames);
     }
+
+
 
     *_dataprocessed = true;
 }

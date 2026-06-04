@@ -253,6 +253,7 @@ void YUV2RGBPipeline::destroySlot(YUV2RGBSlotResources& slot) {
     if (slot.converter && slot.converterSlot) {
         slot.converter->destroySlot(slot.converterSlot.get());
     }
+    if (slot.inflightVkFrame) av_frame_free(&slot.inflightVkFrame);
     slot.converterSlot.reset();
     slot.converter = nullptr;
 
@@ -404,4 +405,113 @@ void YUV2RGBPipeline::drainPendingSemaphores(YUV2RGBSlotResources& slot,
     std::lock_guard<std::mutex> lk(slot.pendingSemMutex);
     out.insert(out.end(), slot.pendingSemaphores.begin(), slot.pendingSemaphores.end());
     slot.pendingSemaphores.clear();
+}
+
+bool YUV2RGBPipeline::uploadVulkanFrame(YUV2RGBSlotResources& slot, AVFrame* f) {
+    if (!f || f->format != AV_PIX_FMT_VULKAN || !f->data[0]) return false;
+
+    if (slot.inflightVkFrame) av_frame_free(&slot.inflightVkFrame);
+    slot.inflightVkFrame = av_frame_clone(f);
+    if (!slot.inflightVkFrame) return false;
+
+
+    slot.colorSpace = (f->colorspace == AVCOL_SPC_BT2020_NCL) ? 9
+                    : (f->colorspace == AVCOL_SPC_BT709)      ? 1 : 0;
+    slot.rangeFull  = (f->color_range == AVCOL_RANGE_JPEG)    ? 1 : 0;
+
+    slot.vulkanFed = true;
+    return true;
+}
+
+bool YUV2RGBPipeline::submitAsyncVk(YUV2RGBSlotResources& slot) {
+    std::lock_guard<std::mutex> g(slot.submitMutex);
+
+    AVFrame* f = slot.inflightVkFrame;
+    if (!f || !slot.converter || !slot.converterSlot) return false;
+
+    auto* vkf  = reinterpret_cast<AVVkFrame*>(f->data[0]);
+    auto* fctx = reinterpret_cast<AVHWFramesContext*>(f->hw_frames_ctx->data);
+    auto* vkfc = reinterpret_cast<AVVulkanFramesContext*>(fctx->hwctx);
+    const int P = 0;
+
+    if (vkfc->lock_frame) vkfc->lock_frame(fctx, vkf);
+
+    const VkImage       img       = vkf->img[P];
+    const VkImageLayout srcLayout = vkf->layout[P];
+    const VkAccessFlags srcAccess = (VkAccessFlags)vkf->access[P];
+    const VkSemaphore   sem       = vkf->sem[P];
+    const uint64_t      waitVal   = vkf->sem_value[P];
+    const uint64_t      signalVal = waitVal + 1;
+
+    // 1) Registra: copia image->buffer (converter) + dispatch YUV->RGB.
+    vkResetCommandBuffer(slot.cmd, 0);
+    VkCommandBufferBeginInfo bi{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(slot.cmd, &bi);
+
+    bool copied = slot.converter->recordUploadFromVulkanImage(
+        slot.cmd, slot.converterSlot.get(),
+        img, srcLayout, srcAccess, slot.width, slot.height);
+
+    if (copied) {
+        recordDispatch(slot.cmd, slot);
+    }
+    vkEndCommandBuffer(slot.cmd);
+
+    if (!copied) {
+        if (vkfc->unlock_frame) vkfc->unlock_frame(fctx, vkf);
+        return false;
+    }
+
+    VkSemaphore binSignal = slot.semRing[slot.semWriteIdx];
+    slot.semWriteIdx = (slot.semWriteIdx + 1) % YUV2RGBSlotResources::kSemRing;
+
+    VkSemaphore          waitSems[1]  = { sem };
+    uint64_t             waitVals[1]  = { waitVal };
+    VkPipelineStageFlags waitStage[1] = { VK_PIPELINE_STAGE_TRANSFER_BIT }; // la copia legge l'immagine
+
+    VkSemaphore signalSems[2] = { sem,        binSignal };
+    uint64_t    signalVals[2] = { signalVal,  0 };
+
+    const bool haveTimeline = (sem != VK_NULL_HANDLE);
+
+    VkTimelineSemaphoreSubmitInfo tl{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+    tl.waitSemaphoreValueCount   = haveTimeline ? 1 : 0;
+    tl.pWaitSemaphoreValues      = haveTimeline ? waitVals : nullptr;
+    tl.signalSemaphoreValueCount = haveTimeline ? 2 : 1;
+    tl.pSignalSemaphoreValues    = haveTimeline ? signalVals : &signalVals[1];
+
+    VkSubmitInfo si{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    si.pNext                = &tl;
+    si.waitSemaphoreCount   = haveTimeline ? 1 : 0;
+    si.pWaitSemaphores      = haveTimeline ? waitSems : nullptr;
+    si.pWaitDstStageMask    = haveTimeline ? waitStage : nullptr;
+    si.commandBufferCount   = 1;
+    si.pCommandBuffers      = &slot.cmd;
+    si.signalSemaphoreCount = haveTimeline ? 2 : 1;
+    si.pSignalSemaphores    = haveTimeline ? signalSems : &binSignal;
+
+    vkResetFences(m_ctx->device, 1, &slot.fence);
+
+    VkResult sr;
+    {
+        std::lock_guard<std::mutex> qlk(m_ctx->computeQueueMutexRef());
+        sr = vkQueueSubmit(m_computeQueue, 1, &si, slot.fence);
+    }
+
+    if (sr == VK_SUCCESS) {
+        vkf->layout[P]    = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        vkf->access[P]    = VK_ACCESS_TRANSFER_READ_BIT;
+        vkf->sem_value[P] = signalVal;
+    }
+    if (vkfc->unlock_frame) vkfc->unlock_frame(fctx, vkf);
+
+    if (sr != VK_SUCCESS) return false;
+
+    {
+        std::lock_guard<std::mutex> lk(slot.pendingSemMutex);
+        slot.pendingSemaphores.push_back(binSignal);
+        slot.computeFinished = binSignal;
+    }
+    return true;
 }

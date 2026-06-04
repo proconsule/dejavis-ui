@@ -480,15 +480,17 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
 
         if ((flags & VK_QUEUE_VIDEO_DECODE_BIT_KHR) && m_ctx.decodeQueueFamily == UINT32_MAX)
             m_ctx.decodeQueueFamily = i;
+
+        if ((flags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) && m_ctx.encodeQueueFamily == UINT32_MAX)
+            m_ctx.encodeQueueFamily = i;
     }
 
     if (m_ctx.graphicsQueueFamily == UINT32_MAX) return false;
     if (m_ctx.computeQueueFamily  == UINT32_MAX) m_ctx.computeQueueFamily  = m_ctx.graphicsQueueFamily;
     if (m_ctx.transferQueueFamily == UINT32_MAX) m_ctx.transferQueueFamily = m_ctx.graphicsQueueFamily;
-
-    DEJAVISUI_LOG_DEBUG("Queue families: graphics=%u compute=%u transfer=%u decode=%u",
+    DEJAVISUI_LOG_DEBUG("Queue families: graphics=%u compute=%u transfer=%u decode=%u encode0%u",
         m_ctx.graphicsQueueFamily, m_ctx.computeQueueFamily,
-        m_ctx.transferQueueFamily, m_ctx.decodeQueueFamily);
+        m_ctx.transferQueueFamily, m_ctx.decodeQueueFamily,m_ctx.encodeQueueFamily);
 
     // --- 2. Queue create infos (solo family uniche) ---
     std::vector<VkDeviceQueueCreateInfo> queueInfos;
@@ -499,6 +501,9 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     };
     if (m_ctx.decodeQueueFamily != UINT32_MAX)
         uniqueFamilies.insert(m_ctx.decodeQueueFamily);
+    if (m_ctx.encodeQueueFamily != UINT32_MAX)
+        uniqueFamilies.insert(m_ctx.encodeQueueFamily);
+
 
     float priority = 1.0f;
     for (uint32_t family : uniqueFamilies) {
@@ -547,10 +552,16 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
 
 #endif
 
+    const bool haveVideoQueue = hasExt(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME);
+
     // Video decode — solo se disponibili
-    bool videoDecodeOk = hasExt(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME)
+    bool videoDecodeOk = haveVideoQueue
                       && hasExt(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME)
                       && m_ctx.decodeQueueFamily != UINT32_MAX;
+
+    bool videoEncodeOk = haveVideoQueue
+                      && hasExt(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME)
+                      && m_ctx.encodeQueueFamily != UINT32_MAX;
 
     if (videoDecodeOk) {
         m_ctx.devExt.push_back(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME);
@@ -559,11 +570,30 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME);
         if (hasExt(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME))
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
-        DEJAVISUI_LOG_DEBUG("Vulkan video decode disponibile");
+        DEJAVISUI_LOG_INFO("Vulkan video decode disponibile");
     } else {
         m_ctx.decodeQueueFamily = UINT32_MAX; // forza fallback
-        DEJAVISUI_LOG_DEBUG("Vulkan video decode NON disponibile, uso HW esterno");
+        DEJAVISUI_LOG_ERROR("Vulkan video decode NON disponibile, uso HW esterno");
     }
+
+    bool encMaint1 = false;
+    if (videoEncodeOk) {
+        m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME);
+        if (hasExt(VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME))
+            m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME);
+        if (hasExt(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME))
+            m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME);
+        // video_maintenance1: richiesta dal codec encode di FFmpeg quando c'e'.
+        if (hasExt(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME)) {
+            m_ctx.devExt.push_back(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
+            encMaint1 = true;
+        }
+        DEJAVISUI_LOG_INFO("Vulkan video encode disponibile");
+    } else {
+        m_ctx.encodeQueueFamily = UINT32_MAX;
+        DEJAVISUI_LOG_ERROR("Vulkan video encode NON disponibile, uso encoder esterno (nvenc/...)");
+    }
+
     // 1. Pulisci la catena: usa solo le struct "Vulkan1x" per evitare conflitti
     m_ctx.features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     m_ctx.features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
@@ -572,7 +602,13 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     m_ctx.deviceFeatures2.pNext = &m_ctx.features11;
     m_ctx.features11.pNext = &m_ctx.features12;
     m_ctx.features12.pNext = &m_ctx.sync2Features;
-    m_ctx.sync2Features.pNext = nullptr;
+    if (encMaint1) {
+        m_ctx.videoMaint1.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR;
+        m_ctx.videoMaint1.pNext = nullptr;
+        m_ctx.sync2Features.pNext = &m_ctx.videoMaint1;
+    } else {
+        m_ctx.sync2Features.pNext = nullptr;
+    }
 
     // 2. Interroga le capacità del driver
     vkGetPhysicalDeviceFeatures2(m_ctx.physicalDevice, &m_ctx.deviceFeatures2);
@@ -585,6 +621,8 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
 
     m_ctx.sync2Features.synchronization2 = VK_TRUE;          // Abilita Sync2
     m_ctx.deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
+    if (encMaint1)
+        m_ctx.videoMaint1.videoMaintenance1 = VK_TRUE;
 
     VkDeviceCreateInfo dInfo{};
     dInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -603,6 +641,12 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     vkGetDeviceQueue(m_ctx.device, m_ctx.transferQueueFamily, 0, &m_ctx.transferQueue);
     if (m_ctx.decodeQueueFamily != UINT32_MAX)
         vkGetDeviceQueue(m_ctx.device, m_ctx.decodeQueueFamily, 0, &m_ctx.decodeQueue);
+    if (m_ctx.encodeQueueFamily != UINT32_MAX)
+        vkGetDeviceQueue(m_ctx.device, m_ctx.encodeQueueFamily, 0, &m_ctx.encodeQueue);
+
+    DEJAVISUI_LOG_DEBUG("Queue families: graphics=%u compute=%u transfer=%u decode=%u encode=%u",
+        m_ctx.graphicsQueueFamily, m_ctx.computeQueueFamily, m_ctx.transferQueueFamily,
+        m_ctx.decodeQueueFamily, m_ctx.encodeQueueFamily);
 
 
 #ifdef _WIN32
@@ -1181,8 +1225,14 @@ void CRenderer::InitRGB2YUV() {
     }
     for (size_t i = 0; i < AV_ENCODER->getSlotCount(); ++i) {
         auto& slot = AV_ENCODER->getSlot(i);
+        RGB2YUVFormat fmt =
+#ifdef __APPLE__
+    RGB2YUVFormat::YUV420P;
+#else
+        RGB2YUVFormat::NV12;
+#endif
         RGB2YUVPipeline::instance().createSlot(
-            slot, core_w, core_h, RGB2YUVFormat::NV12,
+            slot, core_w, core_h, fmt,
             m_master_per_frame[0].image.view);
     }
 }

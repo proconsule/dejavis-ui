@@ -16,6 +16,7 @@ public:
                        uint32_t w, uint32_t h);
     bool uploadYuvFrame(AVFrame* frame);
     bool uploadYuvFrame(const NDIlib_video_frame_v2_t& v);
+    bool uploadYuvFrameVulkan(AVFrame* frame);
 
     bool notifyRgbaInputChanged(const VulkanUniTexture& newTex,
                                 uint32_t w, uint32_t h);

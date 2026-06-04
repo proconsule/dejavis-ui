@@ -279,7 +279,7 @@ public:
     VkPipeline            m_mixerPipeline         = VK_NULL_HANDLE;
 
     //SPOUT2
-#ifdef _WIN32
+#ifdef SPOUT2_ENABLED
     spoutVK sender_SPOUT2;
     void Init_SPOUT2();
     void Close_SPOUT2();

@@ -133,16 +133,6 @@ if(Drogon_FOUND)
     message(STATUS "Drogon ${Drogon_VERSION} | target: Drogon::Drogon")
 endif()
 
-# --- libdejavis (local) ---
-find_library(DEJAVIS_LIB_PATH
-    NAMES dejavis libdejavis
-    PATHS "${CMAKE_CURRENT_SOURCE_DIR}/lib" "${CMAKE_BINARY_DIR}"
-)
-if(DEJAVIS_LIB_PATH)
-    message(STATUS "Found libdejavis: ${DEJAVIS_LIB_PATH}")
-else()
-    message(STATUS "libdejavis not found!")
-endif()
 
 # --- projectM ---
 find_path(PROJECTM_INCLUDE_DIR
@@ -206,26 +196,6 @@ target_include_directories(imgui PUBLIC
 )
 message(STATUS "Linking ImGui...")
 target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
-
-# --- NativeFileDialog (not on Linux) ---
-if(NOT LINUX)
-    FetchContent_Declare(
-        nfd
-        GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
-        GIT_TAG        v1.3.0
-    )
-    set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(NFD_INSTALL     OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(nfd)
-endif()
-
-# --- readerwriterqueue ---
-FetchContent_Declare(
-    readerwriterqueue
-    GIT_REPOSITORY https://github.com/cameron314/readerwriterqueue
-    GIT_TAG        master
-)
-FetchContent_MakeAvailable(readerwriterqueue)
 
 # --- SQLiteCpp ---
 FetchContent_Declare(
@@ -492,7 +462,6 @@ target_link_libraries(dejavis-ui PRIVATE
     OpenGL::GL
     Drogon::Drogon
     SQLiteCpp
-    readerwriterqueue
     datachannel-static
     projectM::projectM
     projectM::playlist
@@ -500,8 +469,8 @@ target_link_libraries(dejavis-ui PRIVATE
     ${AVFORMAT_LIBRARIES}
     ${AVFILTER_LIBRARIES}
     ${SWRESAMPLE_LIBRARIES}
-    ${AVUTIL_LIBRARIES}
     ${SWSCALE_LIBRARIES}
+    ${AVUTIL_LIBRARIES}
 )
 
 
@@ -509,7 +478,7 @@ target_link_directories(dejavis-ui PRIVATE ${AVCODEC_LIBRARY_DIRS})
 
 # NativeFileDialog (not on Linux)
 if(NOT LINUX)
-    target_link_libraries(dejavis-ui PRIVATE nfd)
+    target_link_libraries(dejavis-ui PRIVATE winmm)
 endif()
 
 # PortAudio (platform-specific)
@@ -549,6 +518,7 @@ if(SPOUT2_SDK_PATH AND WIN32)
         backend/src/SpoutVK.cpp
         backend/src/video/renderer_spout2.cpp
     )
+    add_compile_definitions(SPOUT2_ENABLED)
     message(STATUS "Spout2 SDK found: ${SPOUT2_SDK_PATH}")
 endif()
 

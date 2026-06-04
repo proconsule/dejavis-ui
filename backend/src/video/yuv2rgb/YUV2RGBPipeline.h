@@ -13,7 +13,10 @@
 extern "C" {
 #include <libavutil/frame.h>
 #include <libavutil/pixfmt.h>
+#include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_vulkan.h>
 }
+
 
 // =============================================================================
 //  YUV2RGBSlotResources
@@ -59,6 +62,8 @@ struct YUV2RGBSlotResources {
     // Handle "corrente" — alias del prossimo semaforo che verra' firmato.
     // Utile per codice legacy che leggeva getComputeFinishedSemaphore().
     VkSemaphore computeFinished = VK_NULL_HANDLE;
+    AVFrame* inflightVkFrame = nullptr;
+    bool     vulkanFed       = false;
 };
 
 class YUV2RGBPipeline {
@@ -94,6 +99,8 @@ public:
     bool uploadNDIFrame(YUV2RGBSlotResources& slot, const NDIlib_video_frame_v2_t& v);
     void recordDispatch(VkCommandBuffer cmd, YUV2RGBSlotResources& slot);
 
+    bool uploadVulkanFrame(YUV2RGBSlotResources& slot, AVFrame* f);
+    bool submitAsyncVk(YUV2RGBSlotResources& slot);
 private:
     YUV2RGBPipeline() = default;
     ~YUV2RGBPipeline() = default;
@@ -117,8 +124,11 @@ private:
     bool createSyncResources(YUV2RGBSlotResources& slot);
     void destroySyncResources(YUV2RGBSlotResources& slot);
 
+
+
     VkQueue  m_computeQueue       = VK_NULL_HANDLE;
     uint32_t m_computeQueueFamily = 0;
+
 };
 
 #endif // DEJAVIS_APP_YUV2RGB_PIPELINE_H

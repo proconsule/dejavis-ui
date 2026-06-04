@@ -309,3 +309,51 @@ bool NV12Converter::uploadNDIFrame(IConverterSlot* slot, const NDIlib_video_fram
 
     return true;
 }
+
+bool NV12Converter::recordUploadFromVulkanImage(VkCommandBuffer cmd,
+                                                IConverterSlot* slot,
+                                                VkImage srcImg,
+                                                VkImageLayout srcLayout,
+                                                VkAccessFlags srcAccess,
+                                                uint32_t w, uint32_t h)
+{
+    auto* s = static_cast<NV12Slot*>(slot);
+    if (!s) return false;
+
+    yuvconv::imageBarrier(cmd, srcImg,
+        srcLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        srcAccess, VK_ACCESS_TRANSFER_READ_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    VkBufferImageCopy yReg{};
+    yReg.bufferOffset      = 0;
+    yReg.bufferRowLength   = (uint32_t)s->strideY;        // = alignUp(w,256)
+    yReg.bufferImageHeight = 0;
+    yReg.imageSubresource  = { VK_IMAGE_ASPECT_PLANE_0_BIT, 0, 0, 1 };
+    yReg.imageOffset       = { 0, 0, 0 };
+    yReg.imageExtent       = { w, h, 1 };
+    vkCmdCopyImageToBuffer(cmd, srcImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           s->bufY, 1, &yReg);
+
+    // (c) Piano UV (PLANE_1, R8G8) -> bufUV. row length in texel R8G8 = strideUV/2.
+    //     extent a meta' risoluzione (NV12 4:2:0).
+    VkBufferImageCopy uvReg{};
+    uvReg.bufferOffset      = 0;
+    uvReg.bufferRowLength   = (uint32_t)(s->strideUV / 2);
+    uvReg.bufferImageHeight = 0;
+    uvReg.imageSubresource  = { VK_IMAGE_ASPECT_PLANE_1_BIT, 0, 0, 1 };
+    uvReg.imageOffset       = { 0, 0, 0 };
+    uvReg.imageExtent       = { w / 2, h / 2, 1 };
+    vkCmdCopyImageToBuffer(cmd, srcImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           s->bufUV, 1, &uvReg);
+
+    // (d) buffer: TRANSFER_WRITE -> SHADER_READ (il dispatch li legge subito dopo).
+    yuvconv::bufferBarrier(cmd, s->bufY,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    yuvconv::bufferBarrier(cmd, s->bufUV,
+        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+    return true;
+}

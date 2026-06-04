@@ -55,6 +55,10 @@ public:
     virtual bool uploadFrame(IConverterSlot* slot, AVFrame* f) = 0;
     virtual bool uploadNDIFrame(IConverterSlot* slot, const NDIlib_video_frame_v2_t& v) = 0;
 
+    virtual bool recordUploadFromVulkanImage(VkCommandBuffer, IConverterSlot*,
+                                             VkImage, VkImageLayout,
+                                             VkAccessFlags,
+                                             uint32_t, uint32_t) { return false; }
 
     struct FrameMetadata {
         int colorSpace;

@@ -22,6 +22,10 @@ public:
     void recordDispatch(VkCommandBuffer cmd, IConverterSlot* slot,
                                    const FrameMetadata& meta,
                                    VkImageLayout& outCurrentLayout) override;
+    bool recordUploadFromVulkanImage(VkCommandBuffer cmd, IConverterSlot* slot,
+                                     VkImage srcImg, VkImageLayout srcLayout,
+                                     VkAccessFlags srcAccess,
+                                     uint32_t w, uint32_t h) override;
 
 private:
     VulkanContext*        m_ctx            = nullptr;

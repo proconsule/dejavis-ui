@@ -131,12 +131,13 @@ bool CAV_DECODER::InitFFmpegVulkanHW()
           (VkVideoCodecOperationFlagBitsKHR)0);
     addQF(m_ctx->transferQueueFamily, 1, VK_QUEUE_TRANSFER_BIT,
           (VkVideoCodecOperationFlagBitsKHR)0);
-    // Decode family: NECESSARIA solo per il decode Vulkan nativo.
-    // Per il path av_hwframe_map (VAAPI->Vulkan) e' superflua: puoi ometterla.
     addQF(m_ctx->decodeQueueFamily,   1, VK_QUEUE_VIDEO_DECODE_BIT_KHR,
           (VkVideoCodecOperationFlagBitsKHR)(
               VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR |
               VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR));
+    addQF(m_ctx->encodeQueueFamily, 1, VK_QUEUE_VIDEO_ENCODE_BIT_KHR,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+
     vkCtx->nb_qf = n;
 
     // --- Campi deprecati: la struct e' zero-init, ma 0 e' un indice VALIDO,
@@ -146,13 +147,21 @@ bool CAV_DECODER::InitFFmpegVulkanHW()
     vkCtx->queue_family_index        = (int)m_ctx->graphicsQueueFamily; vkCtx->nb_graphics_queues = 1;
     vkCtx->queue_family_tx_index     = (int)m_ctx->transferQueueFamily; vkCtx->nb_tx_queues       = 1;
     vkCtx->queue_family_comp_index   = (int)m_ctx->computeQueueFamily;  vkCtx->nb_comp_queues     = 1;
-    vkCtx->queue_family_encode_index = -1;                              vkCtx->nb_encode_queues   = 0;
+    vkCtx->queue_family_decode_index = -1;
+    vkCtx->nb_decode_queues   = 0;
     if (m_ctx->decodeQueueFamily != UINT32_MAX) {
         vkCtx->queue_family_decode_index = (int)m_ctx->decodeQueueFamily;
         vkCtx->nb_decode_queues          = 1;
     } else {
         vkCtx->queue_family_decode_index = -1;
         vkCtx->nb_decode_queues          = 0;
+    }
+    if (m_ctx->encodeQueueFamily != UINT32_MAX) {
+        vkCtx->queue_family_encode_index = (int)m_ctx->encodeQueueFamily;
+        vkCtx->nb_encode_queues          = 1;
+    } else {
+        vkCtx->queue_family_encode_index = -1;
+        vkCtx->nb_encode_queues          = 0;
     }
 #endif
 
@@ -857,7 +866,7 @@ void CAV_DECODER::presentLoop() {
             DEJAVISUI_LOG_DEBUG("Late frame pts=%.3f audio=%.3f diff=%.1fms",
                 df.pts_seconds, audioClock, diff * 1000.0);
         }
-
+        
         {
             std::unique_lock<std::mutex> lock(m_frame_mutex);
             m_frame_queue.pop();
@@ -867,7 +876,7 @@ void CAV_DECODER::presentLoop() {
 
 
         if (df.frame->format == AV_PIX_FMT_VULKAN) {
-            m_postProcessor->setEnabled(true);
+            //m_postProcessor->setEnabled(true);
             m_postProcessor->uploadYuvFrameVulkan(df.frame);
             av_frame_free(&df.frame);
         }

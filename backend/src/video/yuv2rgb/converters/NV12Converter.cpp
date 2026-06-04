@@ -229,12 +229,15 @@ void NV12Converter::recordDispatch(VkCommandBuffer cmd, IConverterSlot* slot,
     auto* s = static_cast<NV12Slot*>(slot);
     if (!s || !m_pipeline) return;
 
+    VkAccessFlags srcAccess = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+
     yuvconv::bufferBarrier(cmd, s->bufY,
-        VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        srcAccess, VK_ACCESS_SHADER_READ_BIT,
+        srcStage, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     yuvconv::bufferBarrier(cmd, s->bufUV,
-        VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+        srcAccess, VK_ACCESS_SHADER_READ_BIT,
+        srcStage, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
     yuvconv::imageBarrier(cmd, s->out.image,
         outCurrentLayout, VK_IMAGE_LAYOUT_GENERAL,

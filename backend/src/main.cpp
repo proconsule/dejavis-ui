@@ -83,10 +83,12 @@ int main(int argc, char* argv[]) {
     Json::Value ndi_out_config = userconfig.getConfig()["ndi_output"];;
 
 
-    if (userconfig.getConfig()["debuglog"].asBool() == true) {
+    if (general_config["debuglog"].asBool() == true) {
         Logger::getInstance().setMinLevel(LogLevel::LevelDebug);
+        av_log_set_level(AV_LOG_VERBOSE);
     }else {
-        Logger::getInstance().setMinLevel(LogLevel::LevelDebug);
+        Logger::getInstance().setMinLevel(LogLevel::LevelInfo);
+        av_log_set_level(AV_LOG_INFO);
     }
 
     std::string audiopath = audio_config["file_path"].asString();
@@ -140,7 +142,7 @@ int main(int argc, char* argv[]) {
         Renderer.fileplayers_basepath = video_config["file_path"].asString();
     }
 
-    av_log_set_level(AV_LOG_VERBOSE);
+
 
     Renderer.Init_Core(video_config["gpu_idx"].asInt(),video_config["core_w"].asInt(),video_config["core_h"].asInt());
     VulkanLog::Init(Renderer.m_ctx.instance,Renderer.m_ctx.device,"DEJAVISUI");

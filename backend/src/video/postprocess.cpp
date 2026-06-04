@@ -107,8 +107,6 @@ bool CPostProcessor::uploadYuvFrameVulkan(AVFrame* frame) {
     const uint32_t h = (uint32_t)frame->height;
     if (w == 0 || h == 0) return false;
 
-    // sw_format reale del frame Vulkan (NV12 / P010 ...): e' cio' che il
-    // converter deve sapere interpretare. Lo slot resta un normale slot "Yuv".
     auto* fctx = reinterpret_cast<AVHWFramesContext*>(frame->hw_frames_ctx->data);
     const int swFmt = (int)fctx->sw_format;
 
@@ -164,7 +162,6 @@ bool CPostProcessor::submit(VkSemaphore externalWait) {
     }
 
     if (slot->kind == ProcessingSlot::InputKind::Yuv) {
-
         if (slot->yuv.vulkanFed)
             YUV2RGBPipeline::instance().submitAsyncVk(slot->yuv);
         else
@@ -178,30 +175,7 @@ bool CPostProcessor::submit(VkSemaphore externalWait) {
             slot->fx, slot->yuv.rgbaTexture.VkTexture.view,
             slot->yuv.rgbaTexture.VkTexture.sampler, yuvSignal);
         }
-    }
-
-    if (slot->kind == ProcessingSlot::InputKind::Yuv) {
-
-        YUV2RGBPipeline::instance().submitAsync(slot->yuv);
-
-        if (fxOn) {
-
-            std::vector<VkSemaphore> yuvSems;
-            YUV2RGBPipeline::drainPendingSemaphores(slot->yuv, yuvSems);
-
-            VkSemaphore yuvSignal = yuvSems.empty()
-                ? VK_NULL_HANDLE
-                : yuvSems.back();
-
-            VideoFXPipeline::instance().submitAsync(
-                slot->fx,
-                slot->yuv.rgbaTexture.VkTexture.view,
-                slot->yuv.rgbaTexture.VkTexture.sampler,
-                yuvSignal
-            );
-        }
-    }
-    else {
+    } else {
         if (fxOn) {
             VideoFXPipeline::instance().submitAsync(
                 slot->fx,
@@ -220,11 +194,13 @@ bool CPostProcessor::submit(VkSemaphore externalWait) {
 // =============================================================================
 VkDescriptorSet CPostProcessor::getOutputDescriptorSet() const {
     ProcessingSlot* slot = m_activeSlot.load(std::memory_order_acquire);
+
+
     if (!slot || !slot->valid) return VK_NULL_HANDLE;
 
     const bool fxOn = m_enabled.load(std::memory_order_acquire);
-    if (fxOn && slot->fx.valid) return slot->fx.finalMixerDescriptorSet;
 
+    if (fxOn && slot->fx.valid) return slot->fx.finalMixerDescriptorSet;
     return slot->bypassMixerDescriptor;
 }
 

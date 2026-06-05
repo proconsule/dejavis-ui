@@ -34,11 +34,12 @@ bool CRenderer::InitImGuiDescriptorPool() {
 
 void CRenderer::Init_ImGui() {
 
-    DEJAVISUI_LOG_DEBUG("Initializing ImGui...");
+    DEJAVISUI_LOG_DEBUG("[UI] Initializing ImGui...");
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.IniFilename = nullptr;
     ImGui::StyleColorsDark();
 
 

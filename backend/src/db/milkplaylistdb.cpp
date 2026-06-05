@@ -293,6 +293,89 @@ bool cmilkplaylistdb::removePresetFromPlaylist(uint32_t _presetid, uint32_t _pla
     return false;
 }
 
+int cmilkplaylistdb::getRandom() {
+    try {
+        SQLite::Statement query(*mDb, "SELECT id FROM presets ORDER BY RANDOM() LIMIT 1");
+
+        if (query.executeStep()) {
+            return query.getColumn(0).getInt();
+        } else {
+            DEJAVISUI_LOG_WARN("getRandom: no preset inside db");
+        }
+    } catch (const std::exception& e) {
+        DEJAVISUI_LOG_ERROR("Errore getRandom: %s", e.what());
+    }
+
+    return -1;
+}
+
+int cmilkplaylistdb::nextId(int _currentid) {
+    try {
+
+        if (_currentid == -1) {
+            SQLite::Statement first(*mDb, "SELECT id FROM presets ORDER BY id ASC LIMIT 1");
+            if (first.executeStep()) {
+                return first.getColumn(0).getInt();
+            }
+            DEJAVISUI_LOG_WARN("nextId: nessun preset presente nel database");
+            return -1;
+        }
+
+        SQLite::Statement query(*mDb,
+            "SELECT id FROM presets WHERE id > ? ORDER BY id ASC LIMIT 1");
+        query.bind(1, _currentid);
+
+        if (query.executeStep()) {
+            return query.getColumn(0).getInt();
+        }
+
+        SQLite::Statement first(*mDb, "SELECT id FROM presets ORDER BY id ASC LIMIT 1");
+        if (first.executeStep()) {
+            return first.getColumn(0).getInt();
+        }
+
+        DEJAVISUI_LOG_WARN("nextId: nessun preset presente nel database");
+
+    } catch (const std::exception& e) {
+        DEJAVISUI_LOG_ERROR("Errore durante nextId (ID: %d): %s", _currentid, e.what());
+    }
+
+    return -1;
+}
+
+int cmilkplaylistdb::prevId(int _currentid) {
+    try {
+        if (_currentid == -1) {
+            SQLite::Statement first(*mDb, "SELECT id FROM presets ORDER BY id ASC LIMIT 1");
+            if (first.executeStep()) {
+                return first.getColumn(0).getInt();
+            }
+            DEJAVISUI_LOG_WARN("prevId: nessun preset presente nel database");
+            return -1;
+        }
+
+        SQLite::Statement query(*mDb,
+            "SELECT id FROM presets WHERE id < ? ORDER BY id DESC LIMIT 1");
+        query.bind(1, _currentid);
+
+        if (query.executeStep()) {
+            return query.getColumn(0).getInt();
+        }
+
+        SQLite::Statement last(*mDb, "SELECT id FROM presets ORDER BY id DESC LIMIT 1");
+        if (last.executeStep()) {
+            return last.getColumn(0).getInt();
+        }
+
+        DEJAVISUI_LOG_WARN("prevId: nessun preset presente nel database");
+
+    } catch (const std::exception& e) {
+        DEJAVISUI_LOG_ERROR("Errore durante prevId (ID: %d): %s", _currentid, e.what());
+    }
+
+    return -1;
+}
+
 std::string cmilkplaylistdb::getPresetContent(uint32_t _presetid) {
     try {
 

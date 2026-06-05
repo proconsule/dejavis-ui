@@ -71,12 +71,18 @@ class cmilkplaylistdb {
         bool addPresetToPlaylist(int _presetid, int _playlistid);
         bool removePresetFromPlaylist(uint32_t _presetid, uint32_t _playlistid);
 
+        int getRandom();
+
+        int nextId(int _currentid);
+
         void createPlaylist(const std::string& name);
         void deletePlaylist(uint32_t playlistid);
 
         void addCategory(std::string _name,int _parentid);
         void deleteCategory(int _id);
         void movePresetToCategory(int _presetid, int _categoryid);
+
+        int prevId(int _currentid);
 
         std::string getPresetContent(uint32_t _presetid);
         std::string getPresetOrigName(uint32_t _presetid);

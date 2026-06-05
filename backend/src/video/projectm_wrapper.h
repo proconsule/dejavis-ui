@@ -61,6 +61,14 @@
 #include <projectM-4/projectM.h>
 #include <projectM-4/playlist.h>
 
+#include "../db/milkplaylistdb.h"
+
+typedef struct {
+    std::string name;
+    int id;
+
+}wrapperpreset_status_struct;
+
 class cprojectm_wrapper {
 public:
     void Init(VulkanContext *_ctx, VulkanUniTexture * _tex, uint32_t _width, uint32_t _height);
@@ -116,11 +124,12 @@ public:
 
 
     bool m_shouldLoadPresetData = false;
+    int m_shouldLoadPresetID = -1;
     std::string m_presetDataToLoad = "";
     std::string m_presetDataToLoadOrigFile = "";
 
 
-    std::string currentpreset = "projectM IDLE Preset";
+    //std::string currentpreset = "projectM IDLE Preset";
 
     void PushAudio(const float* const* input, int in_samples);
 
@@ -130,6 +139,8 @@ public:
     }
 
     Json::Value getStatusJson();
+
+    wrapperpreset_status_struct preset_status;
 
 private:
     GLFWwindow* m_glContext = nullptr;
@@ -149,7 +160,7 @@ private:
     bool m_fxEnabled = false;
 
     std::mutex m_mixer_mutex;
-
+    cmilkplaylistdb *milkdb = nullptr;
 
 
 #ifdef WIN32

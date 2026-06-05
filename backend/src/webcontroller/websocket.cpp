@@ -362,10 +362,44 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			std::string presetdata = milkPlaylistDB->getPresetContent(_presetid);
 			std::string preset_origname = milkPlaylistDB->getPresetOrigName(_presetid);
 
+			m_projectm_wrapper->m_shouldLoadPresetID = _presetid;
 			m_projectm_wrapper->m_presetDataToLoad = presetdata;
 			m_projectm_wrapper->m_presetDataToLoadOrigFile = preset_origname;
 			m_projectm_wrapper->m_shouldLoadPresetData = true;
 
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::PRESET_RANDOM) {
+			int randid = milkPlaylistDB->getRandom();
+			std::string presetdata = milkPlaylistDB->getPresetContent(randid);
+			std::string preset_origname = milkPlaylistDB->getPresetOrigName(randid);
+
+			m_projectm_wrapper->m_shouldLoadPresetID = randid;
+			m_projectm_wrapper->m_presetDataToLoad = presetdata;
+			m_projectm_wrapper->m_presetDataToLoadOrigFile = preset_origname;
+			m_projectm_wrapper->m_shouldLoadPresetData = true;
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::PRESET_PREV) {
+			int previd = milkPlaylistDB->prevId(m_projectm_wrapper->preset_status.id);
+			std::string presetdata = milkPlaylistDB->getPresetContent(previd);
+			std::string preset_origname = milkPlaylistDB->getPresetOrigName(previd);
+
+			m_projectm_wrapper->m_shouldLoadPresetID = previd;
+			m_projectm_wrapper->m_presetDataToLoad = presetdata;
+			m_projectm_wrapper->m_presetDataToLoadOrigFile = preset_origname;
+			m_projectm_wrapper->m_shouldLoadPresetData = true;
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::PRESET_NEXT) {
+			int nextid = milkPlaylistDB->nextId(m_projectm_wrapper->preset_status.id);
+			std::string presetdata = milkPlaylistDB->getPresetContent(nextid);
+			std::string preset_origname = milkPlaylistDB->getPresetOrigName(nextid);
+
+			m_projectm_wrapper->m_shouldLoadPresetID = nextid;
+			m_projectm_wrapper->m_presetDataToLoad = presetdata;
+			m_projectm_wrapper->m_presetDataToLoadOrigFile = preset_origname;
+			m_projectm_wrapper->m_shouldLoadPresetData = true;
 		}
 
 

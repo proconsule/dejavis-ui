@@ -44,9 +44,15 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
     });
 
     useEffect(() => {
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = window.location.hostname;
-        setSocketUrl(`${wsProtocol}//${host}:8848/ws`);
+        const envUrl = import.meta.env.VITE_WS_URL;
+
+        if (envUrl && envUrl !== 'auto') {
+            setSocketUrl(envUrl);
+        } else {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            setSocketUrl(`${wsProtocol}//${host}:8848/ws`);
+        }
     }, []);
 
     const stopAudioMonitor = useCallback(() => {

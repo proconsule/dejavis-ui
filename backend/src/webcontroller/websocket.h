@@ -59,6 +59,8 @@ enum class DEJAVISUI_MSGID {
         PRESET_REMOVE = 4025,
         PRESET_LOAD_DATA = 4026,
 		PRESET_RANDOM = 4027,
+		PRESET_PREV = 4028,
+		PRESET_NEXT = 4029,
 
 
         // Playlist Management

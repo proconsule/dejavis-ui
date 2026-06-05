@@ -216,7 +216,7 @@ export function ProjectMDashboard({milkdbdata}:any) {
                             size="sm"
                             className="h-7 w-8 bg-white/5 hover:bg-white/10 border-white/5 p-0"
                             variant="outline"
-                            onClick={() => sendPMCommand(4001, "prev", true)}
+                            onClick={() => sendPMCommand(4028, "prev", true)}
                         >
                             <SkipBack className="h-3 w-3" />
                         </Button>
@@ -224,7 +224,7 @@ export function ProjectMDashboard({milkdbdata}:any) {
                         <Button
                             size="sm"
                             className="h-7 flex-1 bg-indigo-600/80 hover:bg-indigo-500 text-[10px] font-bold px-2"
-                            onClick={() => sendPMCommand(4001, "random", true)}
+                            onClick={() => sendPMCommand(4027, "random", true)}
                         >
                             Random
                         </Button>
@@ -233,7 +233,7 @@ export function ProjectMDashboard({milkdbdata}:any) {
                             size="sm"
                             className="h-7 w-8 bg-white/5 hover:bg-white/10 border-white/5 p-0"
                             variant="outline"
-                            onClick={() => sendPMCommand(4001, "next", true)}
+                            onClick={() => sendPMCommand(4029, "next", true)}
                         >
                             <SkipForward className="h-3 w-3" />
                         </Button>

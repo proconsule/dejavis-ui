@@ -370,7 +370,8 @@ void cprojectm_wrapper::Execute_ProjectM() {
 
     if (m_shouldLoadPresetData) {
         projectm_load_preset_data(_projectM, m_presetDataToLoad.c_str(), false);
-        currentpreset = m_presetDataToLoadOrigFile;
+        preset_status.name = m_presetDataToLoadOrigFile;
+        preset_status.id = m_shouldLoadPresetID;
         m_shouldLoadPresetData = false;
     }
 
@@ -420,7 +421,7 @@ void cprojectm_wrapper::PushAudio(const float *const *input, int in_samples) {
 Json::Value cprojectm_wrapper::getStatusJson() {
     Json::Value status;
 
-    status["current_preset"] = currentpreset;
+    status["current_preset"] = preset_status.name;
     status["fps"] = 0;
     Json::Value sett ;
     sett["fps_limit"] = 60;

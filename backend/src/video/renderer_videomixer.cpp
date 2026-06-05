@@ -461,7 +461,7 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
             if (auto* pp = p->ndi_receiver->getPostProcessor()) pp->submit();
         }
         if (p->AV_DECODER) {
-            if (auto* pp = p->AV_DECODER->getPostProcessor()) pp->submit();
+            p->AV_DECODER->submitPostProcess();
         }
         if (p->img_viewver) {
             if (p->img_viewver->needUpdate) {

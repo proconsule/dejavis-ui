@@ -139,10 +139,20 @@ public:
     void TestYUVBuffersStatic();
 
 
-    VkDescriptorSet getMixerDescriptorSet() const {
-        return m_postProcessor->getOutputDescriptorSet();
+    void submitPostProcess() {
+        std::shared_lock<std::shared_mutex> lk(m_lifecycleMutex);
+        if (m_postProcessor) m_postProcessor->submit();
+    }
+    void drainWaitSemaphores(std::vector<VkSemaphore>& out) {
+        std::shared_lock<std::shared_mutex> lk(m_lifecycleMutex);
+        if (m_postProcessor) m_postProcessor->getWaitSemaphores(out);
     }
 
+    VkDescriptorSet getMixerDescriptorSet() {
+        std::shared_lock<std::shared_mutex> lk(m_lifecycleMutex);
+        return m_postProcessor ? m_postProcessor->getOutputDescriptorSet()
+            : VK_NULL_HANDLE;
+    }
 
     Json::Value getJsonStatus();
 
@@ -312,6 +322,8 @@ private:
     std::atomic<bool> m_yuvFrameReady{false};
 
     AVBufferRef* m_fallback_hw_device_ctx = nullptr;
+
+    std::shared_mutex m_lifecycleMutex;
 };
 
 #endif //DEJAVIS_APP_AV_DECODER_H

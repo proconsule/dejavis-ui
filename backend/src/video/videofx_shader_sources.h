@@ -48,22 +48,18 @@ void main() {
     if (p.x >= sz.x || p.y >= sz.y) return;
 
     vec2 uv = (vec2(p) + 0.5) / vec2(sz);
-    vec4 c = texture(inputSampled, uv);
+    vec4 c = texelFetch(inputSampled, p, 0);
+    //vec4 c = texture(inputSampled, uv);
 
     if (pc.enabled <= 0.0) {
         imageStore(outputImage, p, c);
         return;
     }
 
-    // Distanza euclidea nel colore RGB (più semplice e robusta del solo green channel)
     float d = distance(c.rgb, pc.keyColor);
 
-    // alpha = 0 dentro threshold, 1 oltre threshold+softness, sfumato in mezzo
     float alpha = smoothstep(pc.threshold, pc.threshold + pc.softness, d);
 
-    // Spill suppression: se il pixel ha verde "in eccesso" rispetto a (R+B)/2,
-    // riduci il verde di un fattore proporzionale a spill.
-    // Funziona bene quando keyColor è verde-dominante.
     if (pc.spill > 0.0) {
         float gExcess = c.g - max(c.r, c.b);
         if (gExcess > 0.0) {

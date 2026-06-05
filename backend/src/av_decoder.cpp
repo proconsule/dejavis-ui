@@ -266,6 +266,7 @@ void CAV_DECODER::LoadFileAsync(const std::string &_path) {
 bool CAV_DECODER::LoadFile(const std::string &_path) {
 
     if (m_running.load() || m_fmt_ctx != nullptr) {
+        std::unique_lock<std::shared_mutex> lk(m_lifecycleMutex);
         DEJAVISUI_LOG_DEBUG("LoadFile: cleanup del file precedente");
         cleanupCurrentFile();
     }
@@ -866,7 +867,7 @@ void CAV_DECODER::presentLoop() {
             DEJAVISUI_LOG_DEBUG("Late frame pts=%.3f audio=%.3f diff=%.1fms",
                 df.pts_seconds, audioClock, diff * 1000.0);
         }
-        
+
         {
             std::unique_lock<std::mutex> lock(m_frame_mutex);
             m_frame_queue.pop();
@@ -1309,6 +1310,7 @@ AVFrame* CAV_DECODER::ensureSoftwareFrame(AVFrame* src, AVFrame* tmpSwBuf) {
     av_frame_copy_props(tmpSwBuf, src);
     return tmpSwBuf;
 }
+
 
 Json::Value CAV_DECODER::getJsonStatus() {
 

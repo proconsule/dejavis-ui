@@ -98,7 +98,7 @@ void CRenderer::GLFW_Vulkan_Submit(VkCommandBuffer cmd, uint32_t imageIndex, uin
             if (auto* fx = m_projectm_wrapper->getPostProcessor()) fx->getWaitSemaphores(drained);
         }
         if (auto* dec = videoMixerTextures[i].AV_DECODER) {
-            if (auto* fx = dec->getPostProcessor()) fx->getWaitSemaphores(drained);
+            dec->drainWaitSemaphores(drained);
         }
         if (auto* nr = videoMixerTextures[i].ndi_receiver) {
             if (auto* fx = nr->getPostProcessor()) fx->getWaitSemaphores(drained);

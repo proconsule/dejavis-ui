@@ -580,15 +580,10 @@ void VideoFXPipeline::submitAsync(VideoFXSlotResources& slot,
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &bi);
 
-    // recordDispatch fa TUTTE le transizioni necessarie:
-    //   stage1 (tracked → GENERAL), final (tracked → GENERAL), dispatch,
-    //   final (GENERAL → SHADER_READ_ONLY_OPTIMAL).
-    // Usa solo stage COMPUTE_SHADER_BIT / BOTTOM_OF_PIPE_BIT, validi su compute queue.
     recordDispatch(cmd, slot);
 
     vkEndCommandBuffer(cmd);
 
-    // === Submit (invariato) ===
     VkSubmitInfo si{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
     si.commandBufferCount = 1;
     si.pCommandBuffers    = &cmd;

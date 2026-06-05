@@ -258,7 +258,7 @@ void CAV_ENCODER::addOutput(const std::string& url, const std::string& format) {
         m_active_services_count.store(m_active_services.size(), std::memory_order_release);
     }
 
-    DEJAVISUI_LOG_INFO("Service %s ready", url.c_str());
+    DEJAVISUI_LOG_INFO("[ENCODER] Service %s ready", url.c_str());
 }
 
 bool CAV_ENCODER::addStreamToContext(AVFormatContext* fmt_ctx, AVCodecContext* codec_ctx, AVStream** out_stream) {

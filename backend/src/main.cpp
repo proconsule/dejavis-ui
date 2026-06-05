@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
 #ifdef  __APPLE__
     requestMicrophonePermission();
 #endif
-    DEJAVISUI_LOG_INFO("Using config path: %s",configpath.c_str());
+    DEJAVISUI_LOG_INFO("[DEJAVISUI] Using config path: %s",configpath.c_str());
     userconfig.loadConfig(configpath+"dejavis_config.json");
 
     Json::Value video_config = userconfig.getConfig()["video"];
@@ -97,21 +97,15 @@ int main(int argc, char* argv[]) {
     if (!Audio.startMasterDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Master Dummy");
         return -1;
-    }else {
-        DEJAVISUI_LOG_INFO("Started Master Dummy Audio");
     }
     if (!Audio.startAuxDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Aux Dummy");
         return -1;
-    }else {
-        DEJAVISUI_LOG_INFO("Started Dummy Audio");
     }
 
     if (!Audio.startTrashDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Trash Dummy");
         return -1;
-    }else {
-        DEJAVISUI_LOG_INFO("Started Trash Dummy");
     }
 
 
@@ -198,12 +192,7 @@ int main(int argc, char* argv[]) {
     CWebSocket::initCallbacks();
 
 
-    app().setIntSignalHandler([&]() {
-        DEJAVISUI_LOG_DEBUG("Chiusura intercettata da Drogon...");
 
-        //app().quit();
-        running = false;
-    });
 
     std::thread thr([]() {
 #ifdef __APPLE__
@@ -231,6 +220,12 @@ int main(int argc, char* argv[]) {
                 resp->addHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE");
                 resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
             });
+            app().setTermSignalHandler([&]() {
+                DEJAVISUI_LOG_DEBUG("Chiusura intercettata da Drogon...");
+
+                //app().quit();
+                running = false;
+            });
             app().run();
         } else {
             DEJAVISUI_LOG_ERROR("NO %s - %s found, starting with http mode, no WEBRTC Audio support", certPath.c_str(), keyPath.c_str());
@@ -241,6 +236,12 @@ int main(int argc, char* argv[]) {
                 resp->addHeader("Access-Control-Allow-Origin", "*");
                 resp->addHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE");
                 resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+            });
+            app().setTermSignalHandler([&]() {
+                DEJAVISUI_LOG_DEBUG("Chiusura intercettata da Drogon...");
+
+                //app().quit();
+                running = false;
             });
             app().run();
         }

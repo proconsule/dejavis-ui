@@ -225,6 +225,7 @@ bool CAudio::startTrashDummy() {
 
 bool CAudio::startMasterDummy() {
     std::lock_guard<std::mutex> lock(audioMutex);
+    DEJAVISUI_LOG_INFO("[AUDIO] Starting MASTER Dummy Clock");
     dummy = true;
 
     ismasterDummyTimerRunning = true;
@@ -239,6 +240,8 @@ bool CAudio::startMasterDummy() {
 }
 
 void CAudio::startAuxDummyTimer() {
+    std::lock_guard<std::mutex> lock(audioMutex);
+    DEJAVISUI_LOG_INFO("[AUDIO] Starting AUX Dummy Clock");
     const int64_t sampleRate = AUDIO_MIXER.master_samplerate;;
     const int channels = 2;
     const size_t chunkSize = 256;
@@ -341,7 +344,7 @@ bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _sampler
     outputParams.hostApiSpecificStreamInfo = nullptr;
 
     Pa_OpenStream(&outputStream, nullptr, &outputParams, _samplerate, 256, paClipOff, audioOutputCallback, AUDIO_MIXER.getMixerOutputItem(0));
-    DEJAVISUI_LOG_INFO("Opening %s, using %d hz , channels: %d",outputDevices[deviceId].name.c_str(),_samplerate,_channels);
+    DEJAVISUI_LOG_INFO("[AUDIO] Opening %s, using %d hz , channels: %d",outputDevices[deviceId].name.c_str(),_samplerate,_channels);
     return Pa_StartStream(outputStream) == paNoError;
 }
 

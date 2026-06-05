@@ -123,27 +123,8 @@ CRenderer::CRenderer() {
     vsync = true;
 }
 
-void CRenderer::    FetchGPUList(bool _vulkandebug){
-    /*
-    VkInstance instance;
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Dejavis UI";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "Dejavis Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    // Chiediamo supporto almeno per Vulkan 1.0
-    appInfo.apiVersion = VK_API_VERSION_1_2;
+void CRenderer::FetchGPUList(bool _vulkandebug){
 
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-        std::cerr << "Errore: Impossibile creare istanza Vulkan!" << std::endl;
-        return;
-    }
-    */
     std::vector<const char*> extensions;
     extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 
@@ -192,6 +173,15 @@ void CRenderer::    FetchGPUList(bool _vulkandebug){
     instInfo.enabledExtensionCount = (uint32_t)extensions.size();
     instInfo.ppEnabledExtensionNames = extensions.data();
 //#define NDEBUG
+if (_vulkandebug) {
+    const char* validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+    instInfo.enabledLayerCount = 1;
+    instInfo.ppEnabledLayerNames = validationLayers;
+}else {
+    instInfo.enabledLayerCount = 0;
+}
+
+    /*
 #ifdef NDEBUG
     instInfo.enabledLayerCount = 0;
 #else
@@ -199,7 +189,7 @@ void CRenderer::    FetchGPUList(bool _vulkandebug){
     instInfo.enabledLayerCount = 1;
     instInfo.ppEnabledLayerNames = validationLayers;
 #endif
-
+    */
     bool success = vkCreateInstance(&instInfo, nullptr, &m_ctx.instance) == VK_SUCCESS;
     if(!success){
         DEJAVISUI_LOG_ERROR("Unable to create instance");
@@ -250,175 +240,6 @@ void CRenderer::    FetchGPUList(bool _vulkandebug){
     //vkDestroyInstance(instance, nullptr);
 }
 
-/*
-
-bool CRenderer::Init_Core(uint32_t gpuidx,uint32_t _core_w,uint32_t _core_h) {
-
-
-    core_w = _core_w;
-    core_h = _core_h;
-
-    for (int i=0;i<10;i++) {
-        videoMixerTextures[i].originalIdx = i;
-    }
-
-    VkInstance instance;
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Dejavis UI";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "Dejavis Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    // Chiediamo supporto almeno per Vulkan 1.0
-    appInfo.apiVersion = VK_API_VERSION_1_3;
-
-    m_ctx.physicalDevice = gpu_list[gpuidx].physicalDevice;
-
-    if (!m_ctx.physicalDevice) return false;
-
-    uint32_t qCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(m_ctx.physicalDevice, &qCount, nullptr);
-    std::vector<VkQueueFamilyProperties> qProps(qCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(m_ctx.physicalDevice, &qCount, qProps.data());
-
-    m_ctx.queueFamilyIndex = 999;
-    for (uint32_t i = 0; i < qCount; i++) {
-        if (qProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            m_ctx.queueFamilyIndex = i;
-            break;
-        }
-    }
-    if (m_ctx.queueFamilyIndex == 999) return false;
-
-    float priority = 1.0f;
-    VkDeviceQueueCreateInfo qInfo = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-    qInfo.queueFamilyIndex = m_ctx.queueFamilyIndex;
-    qInfo.queueCount = 1;
-    qInfo.pQueuePriorities = &priority;
-
-    std::vector<const char*> devExt = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-#ifdef _WIN32
-    devExt.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-    devExt.push_back(VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
-    devExt.push_back(VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME);
-    devExt.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-#endif
-#ifdef __linux__
-    devExt.push_back(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
-    devExt.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
-    devExt.push_back(VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
-    devExt.push_back(VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
-
-
-#endif
-
-    //devExt.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-
-    devExt.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME); // Necessaria per uint8_t
-    //devExt.push_back(VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME);
-
-    // 2. Configura le features 8-bit
-    VkPhysicalDevice8BitStorageFeatures eightbitFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES };
-    eightbitFeatures.storageBuffer8BitAccess = VK_TRUE;
-    eightbitFeatures.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-
-
-    VkPhysicalDeviceFeatures2 deviceFeatures2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-    deviceFeatures2.pNext = &eightbitFeatures;
-    deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
-
-    VkDeviceCreateInfo dInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
-    dInfo.pNext = &deviceFeatures2;
-    dInfo.queueCreateInfoCount = 1;
-    dInfo.pQueueCreateInfos = &qInfo;
-    dInfo.enabledExtensionCount = (uint32_t)devExt.size();
-    dInfo.ppEnabledExtensionNames = devExt.data();
-
-    if (vkCreateDevice(m_ctx.physicalDevice, &dInfo, nullptr, &m_ctx.device) != VK_SUCCESS) {
-        return false;
-    }
-
-
-
-    vkGetDeviceQueue(m_ctx.device, m_ctx.queueFamilyIndex, 0, &m_ctx.graphicsQueue);
-
-#ifdef _WIN32
-    fpGetMemoryWin32HandleKHR = (PFN_vkGetMemoryWin32HandleKHR)vkGetDeviceProcAddr(m_ctx.device, "vkGetMemoryWin32HandleKHR");
-    if (!fpGetMemoryWin32HandleKHR) {
-        DEJAVISUI_LOG_ERROR("Impossibile caricare vkGetMemoryWin32HandleKHR");
-    }
-
-#endif
-
-
-
-    VkCommandPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = m_ctx.queueFamilyIndex;
-    if (vkCreateCommandPool(m_ctx.device, &poolInfo, nullptr, &m_ctx.commandPool) != VK_SUCCESS) return false;
-
-    m_ctx.commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    VkCommandBufferAllocateInfo cbAlloc = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr, m_ctx.commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, (uint32_t)m_ctx.commandBuffers.size() };
-    vkAllocateCommandBuffers(m_ctx.device, &cbAlloc, m_ctx.commandBuffers.data());
-
-
-
-    if (!CreateMasterResources(core_w, core_h)) return false;
-
-    if (!CreateDescriptorPool()) return false; // Crea il pool che abbiamo detto prima
-    if (!CreateDefaultSampler()) return false; // Crea il sampler
-
-
-    if (!CreateYUVResources(&m_yuvCompute,core_w, core_h)) return false;
-    InitYUVComputePipeline();
-
-
-
-
-    CreateStagingResources(core_w, core_h);
-    InitInteropResource(core_w,core_h);
-
-    if (!initVideoMixer()) {
-        DEJAVISUI_LOG_ERROR("Errore inizializzazione Video Mixer");
-        return false;
-    }
-
-    DEJAVISUI_LOG_DEBUG("Debug Pre-Descriptor: Pool: %p, Layout: %p, View: %p, Sampler: %p",
-    (void*)m_ctx.descriptorPool,
-    (void*)m_mixerDescriptorLayout,
-    (void*)videoTextures[0].VkTexture.view,
-    (void*)m_defaultSampler);
-
-    videoTextures[0].VkTexture.descriptorSet = createTextureDescriptor(videoTextures[0].VkTexture.view);
-    if (videoTextures[0].VkTexture.descriptorSet == VK_NULL_HANDLE) {
-        DEJAVISUI_LOG_ERROR("ERRORE CRITICO: Fallita creazione Descriptor Set interop!");
-    } else {
-        DEJAVISUI_LOG_DEBUG("Descriptor Set interop creato con successo!");
-    }
-
-    DEJAVISUI_LOG_DEBUG("Master RenderPass creato: %p", (void*)m_master.renderPass);
-
-    VkFenceCreateInfo fInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, VK_FENCE_CREATE_SIGNALED_BIT };
-    VkSemaphoreCreateInfo sInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-
-    m_display.inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-    m_display.imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    m_display.renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        vkCreateFence(m_ctx.device, &fInfo, nullptr, &m_display.inFlightFences[i]);
-        vkCreateSemaphore(m_ctx.device, &sInfo, nullptr, &m_display.imageAvailableSemaphores[i]);
-        vkCreateSemaphore(m_ctx.device, &sInfo, nullptr, &m_display.renderFinishedSemaphores[i]);
-    }
-
-    gpu_active = true;
-
-
-    return true;
-}
-
-*/
-
 void CRenderer::Cleanup_Core() {
     vkDeviceWaitIdle(m_ctx.device);
     for (auto& mr : m_master_per_frame) {
@@ -441,7 +262,7 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     m_ctx.isNVIDIA = (properties.vendorID == VENDOR_ID_NVIDIA);
 
 
-    DEJAVISUI_LOG_INFO("GPU rilevata (Vendor ID: 0x%04X): %s",
+    DEJAVISUI_LOG_INFO("[CORE] GPU Detected (Vendor ID: 0x%04X): %s",
                        properties.vendorID, properties.deviceName);
 
 
@@ -457,6 +278,7 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     m_ctx.computeQueueFamily  = UINT32_MAX;
     m_ctx.transferQueueFamily = UINT32_MAX;
     m_ctx.decodeQueueFamily   = UINT32_MAX;
+    m_ctx.encodeQueueFamily   = UINT32_MAX;
 
     for (uint32_t i = 0; i < qCount; i++) {
         VkQueueFlags flags = qProps[i].queueFlags;
@@ -570,10 +392,10 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME);
         if (hasExt(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME))
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
-        DEJAVISUI_LOG_INFO("Vulkan video decode disponibile");
+        DEJAVISUI_LOG_INFO("[CORE] Vulkan video decode available");
     } else {
         m_ctx.decodeQueueFamily = UINT32_MAX; // forza fallback
-        DEJAVISUI_LOG_ERROR("Vulkan video decode NON disponibile, uso HW esterno");
+        DEJAVISUI_LOG_ERROR("[CORE] Vulkan video decode NOT available, trying other HW API");
     }
 
     bool encMaint1 = false;
@@ -588,13 +410,12 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
             encMaint1 = true;
         }
-        DEJAVISUI_LOG_INFO("Vulkan video encode disponibile");
+        DEJAVISUI_LOG_INFO("[CORE] Vulkan video encode available");
     } else {
         m_ctx.encodeQueueFamily = UINT32_MAX;
-        DEJAVISUI_LOG_ERROR("Vulkan video encode NON disponibile, uso encoder esterno (nvenc/...)");
+        DEJAVISUI_LOG_ERROR("[CORE] Vulkan video encode NOT available, trying other HW API");
     }
 
-    // 1. Pulisci la catena: usa solo le struct "Vulkan1x" per evitare conflitti
     m_ctx.features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     m_ctx.features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     m_ctx.sync2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
@@ -674,9 +495,6 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
                               ? createPool(m_ctx.transferQueueFamily)
                               : m_ctx.graphicsCommandPool;
 
-    // Compatibilità col vecchio codice che usa m_ctx.commandPool
-    //m_ctx.commandPool = m_ctx.graphicsCommandPool;
-
     // --- 8. Command buffers ---
     m_ctx.commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo cbAlloc{
@@ -697,12 +515,8 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     }
     if (!CreateDescriptorPool())                return false;
     if (!CreateDefaultSampler())                return false;
-    //if (!CreateYUVResources(&m_yuvCompute, core_w, core_h)) return false;
-    //InitYUVComputePipeline();
-    //InitYUVToRGBAComputePipeline();
-    CreateStagingResources(core_w, core_h);
-    //InitInteropResource(core_w, core_h);
 
+    CreateStagingResources(core_w, core_h);
 
 
     InitYUV2RGB();
@@ -713,10 +527,6 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
         return false;
     }
 
-    /*
-    videoTextures[0].VkTexture.descriptorSet =
-        createTextureDescriptor(videoTextures[0].VkTexture.view);
-    */
     VkFenceCreateInfo fInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
                              nullptr, VK_FENCE_CREATE_SIGNALED_BIT };
     VkSemaphoreCreateInfo sInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };

@@ -446,12 +446,7 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
         if (!p->isVisible) continue;
 
         if (i == 0 && m_projectm_wrapper) {
-        /*
-            DEJAVISUI_LOG_DEBUG("[PreRender] projectmPP=%p slot0.inUse=%d slot0.isVisible=%d",
-    m_projectm_wrapper ? m_projectm_wrapper->getPostProcessor() : nullptr,
-    videoMixerTextures[0].inUse,
-    videoMixerTextures[0].isVisible);
-        */
+
             if (auto* pp = m_projectm_wrapper->getPostProcessor()) pp->submit();
         }
 
@@ -510,16 +505,6 @@ void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
 
 }
 
-void CRenderer::TestVideoMixer(VideoMixerProp &prop,int _mixerid) {
-    videoMixerTextures[_mixerid].pos_x = prop.pos_x;
-    videoMixerTextures[_mixerid].pos_y = prop.pos_y;
-    videoMixerTextures[_mixerid].scale_x = prop.scale_x;
-    videoMixerTextures[_mixerid].scale_y = prop.scale_y;
-    videoMixerTextures[_mixerid].alpha = prop.alpha;
-    videoMixerTextures[_mixerid].layer = prop.layer;
-
-
-}
 VideoMixerProp CRenderer::GetTestVideoMixer() {
     return videoMixerTextures[0];
 }

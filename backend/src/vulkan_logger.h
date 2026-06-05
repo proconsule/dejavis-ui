@@ -66,9 +66,6 @@ public:
             createInfo.pfnUserCallback = DebugCallback;
 
             pfnCreateMessenger(instance, &createInfo, nullptr, &debugMessenger);
-            std::cout << "VulkanLog: Sistema di monitoraggio ATTIVO." << std::endl;
-        } else {
-            std::cout << "VulkanLog: Impossibile attivare il Messenger (Estensione mancante?)" << std::endl;
         }
     }
 

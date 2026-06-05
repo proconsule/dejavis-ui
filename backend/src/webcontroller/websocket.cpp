@@ -645,21 +645,6 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 
 		}
 
-		if (json["msgid"] == 8001) {
-
-			int idx = json["input_index"].asInt();
-
-			VideoMixerProp tmpret =  Renderer->videoMixerTextures[idx];
-			tmpret.pos_x = json["pos_x"].asFloat();
-			tmpret.pos_y = json["pos_y"].asFloat();
-			tmpret.scale_x= json["scale_x"].asFloat();
-			tmpret.scale_y = json["scale_y"].asFloat();
-			tmpret.alpha = json["alpha"].asFloat();
-			tmpret.layer = json["layer"].asInt();
-			Renderer->TestVideoMixer(tmpret,idx);
-
-		}
-
 		if (json["command"].asString() == "stop_input_audio") {
 			//Audio->stopMixerInput(1);
 		}
@@ -674,13 +659,13 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 		}
 
 	}
-    LOG_DEBUG << "new websocket message:" << message;
+    DEJAVISUI_LOG_DEBUG("new websocket message: %s",message.c_str());
 
 }
 
 void CWebSocket::handleConnectionClosed(const WebSocketConnectionPtr &conn)
 {
-    LOG_DEBUG << "websocket closed!";
+    DEJAVISUI_LOG_DEBUG("websocket closed!");
 	if (Broadcaster) {
 		Broadcaster->closeSession(sessionIdOf(conn));
 	}
@@ -691,7 +676,7 @@ void CWebSocket::handleConnectionClosed(const WebSocketConnectionPtr &conn)
 void CWebSocket::handleNewConnection(const HttpRequestPtr &req,
                                         const WebSocketConnectionPtr &conn)
 {
-    LOG_DEBUG << "new websocket connection!";
+    DEJAVISUI_LOG_DEBUG("new websocket connection!");
 	std::lock_guard<std::mutex> lock(clientsMutex);
     clients.push_back(conn);
 }
@@ -717,7 +702,7 @@ std::string CWebSocket::sessionIdOf(const WebSocketConnectionPtr& conn) {
 void CWebSocket::initBroadcaster() {
 	if (Broadcaster) return;
 	if (!AV_ENCODER) {
-		LOG_ERROR << "initBroadcaster: AV_ENCODER non inizializzato";
+		DEJAVISUI_LOG_ERROR("initBroadcaster: AV_ENCODER not inited");
 		return;
 	}
 
@@ -745,9 +730,6 @@ void CWebSocket::initBroadcaster() {
 		}
 		msg["payload"] = payload;
 
-		// Trova la connection con quel sid e invia.
-		// Eseguito sul thread di libdatachannel — usiamo runInLoop per
-		// delegare alla event loop di Drogon.
 		std::shared_ptr<std::string> sid_copy = std::make_shared<std::string>(sid);
 		std::shared_ptr<Json::Value> msg_copy = std::make_shared<Json::Value>(std::move(msg));
 
@@ -766,32 +748,12 @@ void CWebSocket::initBroadcaster() {
 
 	Broadcaster = std::make_shared<WebRTCBroadcaster>(AV_ENCODER, signaling_cb);
 	Broadcaster->start();
-	LOG_DEBUG << "WebRTC preview broadcaster avviato";
+	DEJAVISUI_LOG_DEBUG("WebRTC preview broadcaster started");
 }
 
 
 void CWebSocket::initCallbacks() {
-	/*
-    if (Audio && Audio->getPlaylistManager()) {
-        Audio->getPlaylistManager()->SetNotifyCallback([]() {
 
-            if (!drogon::app().isRunning()) return;
-
-            drogon::app().getLoop()->runInLoop([]() {
-                if (!drogon::app().isRunning()) return;
-
-                Json::Value playlistJson = Audio->getPlaylistManager()->GetFullStatusJson();
-                playlistJson["msgid"] = 44;
-                std::string msg = playlistJson.toStyledString();
-
-                std::lock_guard<std::mutex> lock(CWebSocket::clientsMutex);
-                for (auto &conn : CWebSocket::clients) {
-                    if (conn->connected()) conn->send(msg);
-                }
-            });
-        });
-    }
-    */
 }
 
 

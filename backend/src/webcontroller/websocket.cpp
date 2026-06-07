@@ -122,12 +122,10 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			uint32_t channels = json["channels"].asUInt();
 			uint32_t samplerate = json["sampleRate"].asUInt();
 
-			bool success = Audio->startMasterOutput(deviceId, channels, samplerate);
-
-			Json::Value response;
-			response["msgid"] = 52;
-			response["status"] = success ? "success" : "error";
-			if (!success) response["message"] = "Failed to initialize output device";
+			Audio->m_penedingAudioDevLoad.deviceid = deviceId;
+			Audio->m_penedingAudioDevLoad.samplerate = samplerate;
+			Audio->m_penedingAudioDevLoad.channels = channels;
+			Audio->m_penedingAudioDevLoad.shouldLoad.store(true);
 
 		}
 		if (json["msgid"] == 53) {
@@ -597,17 +595,29 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 		if (getMsgId(json) == DEJAVISUI_MSGID::AUDIO_MASTER_OUT_CTRL) {
 			int mytype = json["type"].asInt();
 			int myidx = json["outputidx"].asInt();
-			Audio->stopMasterOut();
+			int deviceId = json["devid"].asInt();
+			uint32_t channels = json["channels"].asUInt();
+			uint32_t samplerate = json["samplerate"].asUInt();
+			Audio->m_penedingAudioDevLoad.deviceid = deviceId;
+			Audio->m_penedingAudioDevLoad.outputtype = 0;
+			if (mytype == 0 ) Audio->m_penedingAudioDevLoad.deviceid == -1;
+			Audio->m_penedingAudioDevLoad.samplerate = samplerate;
+			Audio->m_penedingAudioDevLoad.channels = channels;
+			Audio->m_penedingAudioDevLoad.shouldLoad.store(true);
+
+
+			//Audio->stopMasterOut();
+			/*
 			if (mytype == 0 && myidx == 0) {
 				Audio->startMasterDummy();
 			}
 			if (mytype == 1 && myidx == 0) {
 				int deviceId = json["devid"].asInt();
-				uint32_t channels = json["channels"].asUInt();
-				uint32_t samplerate = json["samplerate"].asUInt();
+
 
 				bool success = Audio->startMasterOutput(deviceId, channels, samplerate);
 			}
+			*/
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_VISIBLE) {

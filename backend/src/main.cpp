@@ -110,9 +110,15 @@ int main(int argc, char* argv[]) {
 
 
     Audio.m_projectm_wrapper = &projectm_wrapper;
-    Audio.startMasterOutput(Audio.getDefaultOutput(),2,48000);
+//    Audio.startMasterOutput(Audio.getDefaultOutput(),2,48000);
 
     Audio.startProcessing();
+
+    Audio.m_penedingAudioDevLoad.deviceid = Audio.getDefaultOutput();
+    Audio.m_penedingAudioDevLoad.samplerate = 48000;
+    Audio.m_penedingAudioDevLoad.channels = 2;
+    Audio.m_penedingAudioDevLoad.shouldLoad.store(true);
+
 
     Audio.fileplayers_basepath = audiopath.c_str();
 

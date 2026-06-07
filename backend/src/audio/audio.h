@@ -31,6 +31,15 @@ struct AudioDevice {
     bool isDefaultOutput = false;
 };
 
+struct PendingAudioOutDevLoad {
+	std::atomic<bool> shouldLoad{false};
+	int deviceid = -1;
+	int outputtype = -1;
+	int samplerate = 48000;
+	int channels = 2;
+
+};
+
 class CAudio
 {
   public:
@@ -93,6 +102,7 @@ class CAudio
 	cprojectm_wrapper * m_projectm_wrapper = nullptr;
 	CNDISender * av_ndi_sender = nullptr;
 
+	PendingAudioOutDevLoad m_penedingAudioDevLoad;
 
 private:
 	PaError lastError;

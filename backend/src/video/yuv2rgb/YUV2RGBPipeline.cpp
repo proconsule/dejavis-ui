@@ -410,16 +410,19 @@ void YUV2RGBPipeline::drainPendingSemaphores(YUV2RGBSlotResources& slot,
 bool YUV2RGBPipeline::uploadVulkanFrame(YUV2RGBSlotResources& slot, AVFrame* f) {
     if (!f || f->format != AV_PIX_FMT_VULKAN || !f->data[0]) return false;
 
-    if (slot.inflightVkFrame) av_frame_free(&slot.inflightVkFrame);
-    slot.inflightVkFrame = av_frame_clone(f);
-    if (!slot.inflightVkFrame) return false;
+    AVFrame* clone = av_frame_clone(f);
+    if (!clone) return false;
 
+    {
+        std::lock_guard<std::mutex> g(slot.submitMutex);
+        if (slot.inflightVkFrame) av_frame_free(&slot.inflightVkFrame);
+        slot.inflightVkFrame = clone;
 
-    slot.colorSpace = (f->colorspace == AVCOL_SPC_BT2020_NCL) ? 9
-                    : (f->colorspace == AVCOL_SPC_BT709)      ? 1 : 0;
-    slot.rangeFull  = (f->color_range == AVCOL_RANGE_JPEG)    ? 1 : 0;
-
-    slot.vulkanFed = true;
+        slot.colorSpace = (f->colorspace == AVCOL_SPC_BT2020_NCL) ? 9
+                        : (f->colorspace == AVCOL_SPC_BT709)      ? 1 : 0;
+        slot.rangeFull  = (f->color_range == AVCOL_RANGE_JPEG)    ? 1 : 0;
+        slot.vulkanFed  = true;
+    }
     return true;
 }
 
@@ -428,6 +431,7 @@ bool YUV2RGBPipeline::submitAsyncVk(YUV2RGBSlotResources& slot) {
 
     AVFrame* f = slot.inflightVkFrame;
     if (!f || !slot.converter || !slot.converterSlot) return false;
+    if (!f->data[0] || !f->hw_frames_ctx) return false;
 
     auto* vkf  = reinterpret_cast<AVVkFrame*>(f->data[0]);
     auto* fctx = reinterpret_cast<AVHWFramesContext*>(f->hw_frames_ctx->data);

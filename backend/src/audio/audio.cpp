@@ -324,7 +324,7 @@ void CAudio::startMasterDummyTimer() {
 bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
 
     stopMasterOut();
-    std::lock_guard<std::mutex> lock(audioMutex);
+    //std::lock_guard<std::mutex> lock(audioMutex);
     dummy = false;
 
     AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = deviceId;
@@ -497,6 +497,26 @@ void CAudio::processingLoop() {
 
     while (isRunning) {
 
+        if (m_penedingAudioDevLoad.shouldLoad.load()) {
+            m_penedingAudioDevLoad.shouldLoad.store(false);
+            if (m_penedingAudioDevLoad.outputtype == 0) {
+                stopMasterOut();
+                if (m_penedingAudioDevLoad.deviceid == -1) {
+                    startMasterDummy();
+                }else {
+                    startMasterOutput(m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
+                }
+            }
+            if (m_penedingAudioDevLoad.outputtype == 1) {
+                stopAuxOut();
+                if (m_penedingAudioDevLoad.deviceid == -1) {
+                    startAuxDummy();
+                }else {
+                    startAuxOutput(m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
+                }
+            }
+        }
+
         AUDIO_MIXER.ProcessMix(samplesNeeded);
 
         bool dataProcessedMaster = false;
@@ -573,7 +593,7 @@ void CAudio::stop() {
 
 
 void CAudio::stopMasterOut() {
-	std::lock_guard<std::mutex> lock(audioMutex);
+	//std::lock_guard<std::mutex> lock(audioMutex);
     AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = -1;
     AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = "";
     if (ismasterDummyTimerRunning) {
@@ -583,7 +603,7 @@ void CAudio::stopMasterOut() {
         }
     }
 
-
+    DEJAVISUI_LOG_DEBUG("STOPPING MASTER OUT");
     if (outputStream) {
         Pa_StopStream(outputStream);
         Pa_CloseStream(outputStream);
@@ -593,7 +613,34 @@ void CAudio::stopMasterOut() {
     AUDIO_MIXER.getMixerOutputItem(0)->Resampler.cleanup();
 	AUDIO_MIXER.getMixerOutputItem(0)->buffer->reset();
 
+    DEJAVISUI_LOG_DEBUG("STOPPED MASTER OUT");
     activeOutputId = -1;
+
+}
+
+void CAudio::stopAuxOut() {
+    //std::lock_guard<std::mutex> lock(audioMutex);
+    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_id = -1;
+    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name = "";
+    if (isauxDummyTimerRunning) {
+        isauxDummyTimerRunning = false;
+        if (auxdummyTimerThread.joinable()) {
+            auxdummyTimerThread.join();
+        }
+    }
+
+    DEJAVISUI_LOG_DEBUG("STOPPING AUX OUT");
+    if (auxoutputStream) {
+        Pa_StopStream(auxoutputStream);
+        Pa_CloseStream(auxoutputStream);
+        auxoutputStream = nullptr;
+    }
+
+    AUDIO_MIXER.getMixerOutputItem(1)->Resampler.cleanup();
+    AUDIO_MIXER.getMixerOutputItem(1)->buffer->reset();
+
+    DEJAVISUI_LOG_DEBUG("STOPPED AUX OUT");
+
 
 }
 

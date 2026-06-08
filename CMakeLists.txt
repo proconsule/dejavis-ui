@@ -476,8 +476,8 @@ target_link_libraries(dejavis-ui PRIVATE
 
 target_link_directories(dejavis-ui PRIVATE ${AVCODEC_LIBRARY_DIRS})
 
-# NativeFileDialog (not on Linux)
-if(NOT LINUX)
+
+if(WIN32)
     target_link_libraries(dejavis-ui PRIVATE winmm)
 endif()
 

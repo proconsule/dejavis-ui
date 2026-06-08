@@ -1,9 +1,18 @@
-## DEJAVISUI
+## dejavis-ui
 
-DEJAVISUI is a trivial Audio/Video mixer with VIS  
+![dejavisui-logo.png](assets/dejavisui-logo.png)
+
+dejavis-ui is a trivial Audio/Video mixer with VIS  
 I started this as a "swiss army knife" for audio/video form "any" source to "any" dest.  
 I also integrated the terrific projectM library to add fancy vis if needed  
 
+dejavis-ui is diveded in two parts backend and frontend.
+
+backend is main app that run on machine and uses the gpu/cpu to do fancy stuff with your media
+
+frontend is the webpages (react/TS) that connect via websocket and control the backend.
+
+Since backend is controlled via websocket, anyone can write his own controller for backend in any language.
 
 Features:
 

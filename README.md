@@ -19,6 +19,7 @@ Features:
 - Audio Mixer (16x2) Input can be live,url,file
 - Video Mixer (Vulkan based)
 - projectM vis (openGL -> Vulkan zero-copy)
+- vulkan video decode and encode (if supported by hw/drivers)
 - SRT output
 - SPOUT2 support (windows only)
 - Web Interface for setting/controlling

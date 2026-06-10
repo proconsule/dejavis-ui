@@ -16,6 +16,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
 
+    <key>CFBundleIconFile</key>
+    <string>app.icns</string>
+
     <!-- Font embedded nel bundle -->
     <key>ATSApplicationFontsPath</key>
     <string>Resources</string>

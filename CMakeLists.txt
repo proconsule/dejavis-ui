@@ -302,8 +302,6 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/video/yuv2rgb/converters/NV12Converter.cpp
         backend/src/video/yuv2rgb/converters/P010Converter.cpp
 
-
-
 )
 
 
@@ -316,13 +314,20 @@ message(STATUS "OPERATING SYSTEM: ${CMAKE_SYSTEM_NAME}")
 if(APPLE)
     set(DEJAVISUI_FONTS assets/font.ttf)
 
+    set(MAC_ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/assets/app.icns")
+
+    set_source_files_properties(${MAC_ICON_FILE} PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources"
+    )
+
     add_executable(dejavis-ui MACOSX_BUNDLE
-        ${DEJAVISUI_COMMON_SOURCES}
-        backend/src/fs/folders_mac.mm
-        backend/src/audio/macos_permissions.mm
-        ${DEJAVISUI_FONTS}
-        ${CERT_FILE}
-        ${KEY_FILE}
+            ${DEJAVISUI_COMMON_SOURCES}
+            backend/src/fs/folders_mac.mm
+            backend/src/audio/macos_permissions.mm
+            ${DEJAVISUI_FONTS}
+            ${CERT_FILE}
+            ${KEY_FILE}
+            ${MAC_ICON_FILE}
     )
 
 
@@ -340,12 +345,21 @@ if(APPLE)
     add_dependencies(dejavis-ui generate_certs)
 
 else()
-    add_executable(dejavis-ui
-        ${DEJAVISUI_COMMON_SOURCES}
-        ${CERT_FILE}
-        ${KEY_FILE}
-    )
+    if(WIN32)
+        add_executable(dejavis-ui
+            ${DEJAVISUI_COMMON_SOURCES}
+            ${CERT_FILE}
+            ${KEY_FILE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/dejavis-ui.rc
+        )
+    else()
+        add_executable(dejavis-ui
+                ${DEJAVISUI_COMMON_SOURCES}
+                ${CERT_FILE}
+                ${KEY_FILE}
 
+        )
+    endif()
     # Copy font to build directory on Windows/Linux
     add_custom_command(TARGET dejavis-ui POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy

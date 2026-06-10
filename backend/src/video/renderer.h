@@ -232,7 +232,8 @@ public:
     int FindFreeVideoMixerSlot();
     bool AddImageToMixer(const unsigned char* img_data,int img_size,bool isHDR);
     void RemoveImageFromMixer(int slot);
-    void TestVideoMixer(VideoMixerProp &prop,int _mixerid);
+
+    void SetVideoMixerProps(VideoMixerProp &prop,int _mixerid);
     bool AddAVDecoderToMixer(std::string url, int _mixerid);
 
 	bool AddNDIToMixer(int _mixerid);

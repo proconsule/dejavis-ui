@@ -505,6 +505,17 @@ void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
 
 }
 
+void CRenderer::SetVideoMixerProps(VideoMixerProp &prop,int _mixerid) {
+    videoMixerTextures[_mixerid].pos_x = prop.pos_x;
+    videoMixerTextures[_mixerid].pos_y = prop.pos_y;
+    videoMixerTextures[_mixerid].scale_x = prop.scale_x;
+    videoMixerTextures[_mixerid].scale_y = prop.scale_y;
+    videoMixerTextures[_mixerid].alpha = prop.alpha;
+    videoMixerTextures[_mixerid].layer = prop.layer;
+
+
+}
+
 VideoMixerProp CRenderer::GetTestVideoMixer() {
     return videoMixerTextures[0];
 }

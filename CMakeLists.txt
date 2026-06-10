@@ -38,8 +38,8 @@ option(BUILD_FRONTEND "Compile Frontend (Vite/NPM)" OFF)
 option(NDI_SDK_BASE "Compile Frontend (Vite/NPM)" "")
 
 
-option(MYAPP_PROFILING "Enable Tracy profiling" OFF)
-set(TRACY_ENABLE ${MYAPP_PROFILING} CACHE BOOL "" FORCE)
+option(DEJAVIS_PROFILING "Enable Tracy profiling" OFF)
+set(TRACY_ENABLE ${DEJAVIS_PROFILING} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 
 if(NDI_SDK_BASE)

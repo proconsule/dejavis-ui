@@ -673,7 +673,26 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			params.whiteLevel = data.get("whiteLevel", 1.0f).asFloat();
 			params.enabled    = data.get("enabled", 0.0f).asFloat();
 			Renderer->SetColor(video_mixer_idx,params);
-			// Esempio: videoMixerTextures[idx].colorParams = params;
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_COLOR_CTRL) {
+			ColorParams params;
+			int video_mixer_idx = json["input_index"].asInt();
+
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_PROPS_UPDATE) {
+
+			int idx = json["input_index"].asInt();
+
+			VideoMixerProp tmpret =  Renderer->videoMixerTextures[idx];
+			tmpret.pos_x = json["pos_x"].asFloat();
+			tmpret.pos_y = json["pos_y"].asFloat();
+			tmpret.scale_x= json["scale_x"].asFloat();
+			tmpret.scale_y = json["scale_y"].asFloat();
+			tmpret.alpha = json["alpha"].asFloat();
+			tmpret.layer = json["layer"].asInt();
+			Renderer->SetVideoMixerProps(tmpret,idx);
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::NDI_SOURCE_LOAD) {

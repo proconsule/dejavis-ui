@@ -18,6 +18,7 @@
 #define DEJAVIS_USE_VULKAN 1
 
 #include "projectM-4/projectM.h"
+#include <tracy/Tracy.hpp>
 
 struct AudioDevice {
     int id;                   

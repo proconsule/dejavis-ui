@@ -116,7 +116,6 @@ void cprojectm_wrapper::Init_ProjectM_Opengl() {
     _projectM = projectm_create_with_opengl_load_proc(&projectm_dispatchLoadProc, nullptr);
 
     if (_projectM && outText->VkTexture.image) {
-        _playlist = projectm_playlist_create(_projectM);
         projectm_set_window_size(_projectM, pjm_width, pjm_height);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_glFbo);

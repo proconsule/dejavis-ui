@@ -541,6 +541,9 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
         vkCreateSemaphore(m_ctx.device, &sInfo, nullptr, &m_display.renderFinishedSemaphores[i]);
     }
 
+
+    tracy_ctx = TracyVkContext(m_ctx.physicalDevice, m_ctx.device, m_ctx.graphicsQueue, m_ctx.commandBuffers[0]);
+
     gpu_active = true;
     return true;
 }
@@ -731,7 +734,7 @@ void CRenderer::DestroyMasterResources(MasterResources* out) {
 }
 
 void CRenderer::Render() {
-
+    ZoneScoped;
     VideoMixer_SyncInputs();
     dejatimer.update();
 
@@ -789,9 +792,12 @@ void CRenderer::Render() {
 
     vkBeginCommandBuffer(cmd, &beginInfo);
 
+    TracyVkCollect(tracy_ctx, cmd);
 
-    ProcessVideoMixer_PreRenderPass(cmd);
-
+    {
+        TracyVkZone(tracy_ctx, cmd, "PreRender");
+        ProcessVideoMixer_PreRenderPass(cmd);
+    }
 
 #ifdef __APPLE__
 
@@ -838,14 +844,23 @@ void CRenderer::Render() {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 
-    ImGui_Render();
+    //TracyVkZone(tracy_ctx, cmd, "IMGUI");
+    {
+        ImGui_Render();
+        ZoneScopedN("ImGui_Render (CPU)");
+    }
 
+    {
+        TracyVkZone(tracy_ctx, cmd, "Processvideomixer");
+        ProcessVideoMixer(cmd);
+    }
 
+    {
+        TracyVkZone(tracy_ctx, cmd, "IMGUI RenderDrawData");
 
-    ProcessVideoMixer(cmd);
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+    }
 
-
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
 
     vkCmdEndRenderPass(cmd);
@@ -879,9 +894,9 @@ void CRenderer::Render() {
             m_pending_encoder_slot = nullptr;
         }
     }
-
+    //TracyVkZone(tracy_ctx, cmd, "AV ENCODER");
     if(glfw_active) {
-
+        TracyVkZone(tracy_ctx, cmd, "BlitToSwapchain");
 // --- 5. PREPARAZIONE MASTER PER COPIA (Una sola volta!) ---
 
         //TransitionImageLayout(cmd, m_master.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -932,6 +947,7 @@ void CRenderer::Render() {
                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     }
 
+
     vkEndCommandBuffer(cmd);
 
     if (glfw_active) {
@@ -939,6 +955,7 @@ void CRenderer::Render() {
         //m_display.currentFrame = (m_display.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
     LimitFrameRate();
+    FrameMark;
 }
 
 bool CRenderer::CreateStagingResources(uint32_t w, uint32_t h) {

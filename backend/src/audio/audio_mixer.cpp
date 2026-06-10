@@ -305,7 +305,7 @@ void CAUDIO_MIXER::ProcessMixInputs(size_t _samples) {
 
 
 void CAUDIO_MIXER::ProcessMasterMix(size_t frames) {
-
+    ZoneScopedN("ProcessMasterMix");
     size_t master_frames = scaleSamples(frames, 48000, m_outputs[0]->samplerate);
 
     if (m_outputs[0]->buffer->getAvailableWrite() < master_frames*2) return;
@@ -362,7 +362,7 @@ void CAUDIO_MIXER::ProcessMasterMix(size_t frames) {
 }
 
 void CAUDIO_MIXER::ProcessAuxMix(size_t frames) {
-
+    ZoneScopedN("ProcessAuxMix");
     size_t aux_frames = scaleSamples(frames, 48000, m_outputs[1]->samplerate);
 
     if (m_outputs[1].get()->buffer->getAvailableWrite() < aux_frames) return;

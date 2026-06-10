@@ -23,6 +23,8 @@
 #include "backend/src/ndi_sender.h"
 #include "limiter/LimiterBank.h"
 
+#include <tracy/Tracy.hpp>
+
 
 enum class GainPreset {
     Plus0dB = 0,

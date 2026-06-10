@@ -14,6 +14,8 @@ endif()
 
 set(DIST_DIR "${CMAKE_BINARY_DIR}/dist-${TARGET_ARCH}")
 
+
+
 # =============================================================================
 # Global Settings
 # =============================================================================
@@ -35,6 +37,10 @@ endif()
 option(BUILD_FRONTEND "Compile Frontend (Vite/NPM)" OFF)
 option(NDI_SDK_BASE "Compile Frontend (Vite/NPM)" "")
 
+
+option(MYAPP_PROFILING "Enable Tracy profiling" OFF)
+set(TRACY_ENABLE ${MYAPP_PROFILING} CACHE BOOL "" FORCE)
+set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 
 if(NDI_SDK_BASE)
     message(STATUS "NDI SDK Eanbled: adding NDI support")
@@ -72,6 +78,7 @@ find_package(Vulkan      REQUIRED)
 find_package(Shaderc     REQUIRED)
 find_package(glfw3       REQUIRED)
 find_package(Drogon      REQUIRED)
+find_package(projectM4    REQUIRED)
 
 # --- PortAudio ---
 pkg_check_modules(PORTAUDIO REQUIRED portaudio-2.0)
@@ -131,36 +138,6 @@ message(STATUS "FFMPEG_INCLUDE_DIRS: ${FFMPEG_INCLUDE_DIRS}")
 # --- Drogon ---
 if(Drogon_FOUND)
     message(STATUS "Drogon ${Drogon_VERSION} | target: Drogon::Drogon")
-endif()
-
-
-# --- projectM ---
-find_path(PROJECTM_INCLUDE_DIR
-    NAMES projectM.hpp projectM.h
-    PATH_SUFFIXES projectM-4 projectM
-)
-find_library(PROJECTM_LIBRARY          NAMES projectM projectM-4)
-find_library(PROJECTM_PLAYLIST_LIBRARY NAMES projectM-4-playlist projectM-playlist)
-
-if(PROJECTM_LIBRARY AND PROJECTM_INCLUDE_DIR)
-    add_library(projectM::projectM UNKNOWN IMPORTED)
-    set_target_properties(projectM::projectM PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${PROJECTM_INCLUDE_DIR}"
-        IMPORTED_LOCATION             "${PROJECTM_LIBRARY}"
-    )
-    message(STATUS "projectM | lib: ${PROJECTM_LIBRARY} | inc: ${PROJECTM_INCLUDE_DIR}")
-else()
-    message(FATAL_ERROR "projectM or its headers not found! Check your installation.")
-endif()
-
-if(PROJECTM_PLAYLIST_LIBRARY)
-    add_library(projectM::playlist UNKNOWN IMPORTED)
-    set_target_properties(projectM::playlist PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${PROJECTM_INCLUDE_DIR}"
-        IMPORTED_LOCATION             "${PROJECTM_PLAYLIST_LIBRARY}"
-        INTERFACE_LINK_LIBRARIES      projectM::projectM
-    )
-    message(STATUS "projectM playlist: ${PROJECTM_PLAYLIST_LIBRARY}")
 endif()
 
 
@@ -225,27 +202,14 @@ FetchContent_MakeAvailable(datachannel)
 
 include(FetchContent)
 
-# Definizione del download per ffx_a.h
-FetchContent_Declare(
-        ffx_a_header
-        URL "https://raw.githubusercontent.com/GPUOpen-Effects/FidelityFX-FSR/master/ffx-fsr/ffx_a.h"
-        DOWNLOAD_NO_EXTRACT TRUE
+FetchContent_Declare (
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG v0.13.1
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
 )
-
-# Definizione del download per ffx_fsr1.h
-FetchContent_Declare(
-        ffx_fsr1_header
-        URL "https://raw.githubusercontent.com/GPUOpen-Effects/FidelityFX-FSR/master/ffx-fsr/ffx_fsr1.h"
-        DOWNLOAD_NO_EXTRACT TRUE
-)
-
-# Download effettivo dei file
-FetchContent_MakeAvailable(ffx_a_header ffx_fsr1_header)
-
-# Ottieni i percorsi dove CMake ha salvato i file
-FetchContent_GetProperties(ffx_a_header SOURCE_DIR FFX_A_DIR)
-FetchContent_GetProperties(ffx_fsr1_header SOURCE_DIR FFX_FSR1_DIR)
-
+FetchContent_MakeAvailable ( tracy )
 
 # =============================================================================
 # SSL Certificate Generation
@@ -463,8 +427,7 @@ target_link_libraries(dejavis-ui PRIVATE
     Drogon::Drogon
     SQLiteCpp
     datachannel-static
-    projectM::projectM
-    projectM::playlist
+    libprojectM::projectM
     ${AVCODEC_LIBRARIES}
     ${AVFORMAT_LIBRARIES}
     ${AVFILTER_LIBRARIES}
@@ -476,6 +439,7 @@ target_link_libraries(dejavis-ui PRIVATE
 
 target_link_directories(dejavis-ui PRIVATE ${AVCODEC_LIBRARY_DIRS})
 
+target_link_libraries (dejavis-ui PUBLIC TracyClient )
 
 if(WIN32)
     target_link_libraries(dejavis-ui PRIVATE winmm)

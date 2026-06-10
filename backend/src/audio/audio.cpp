@@ -323,8 +323,6 @@ void CAudio::startMasterDummyTimer() {
 
 bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
 
-    stopMasterOut();
-    //std::lock_guard<std::mutex> lock(audioMutex);
     dummy = false;
 
     AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = deviceId;
@@ -351,8 +349,6 @@ bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _sampler
 
 bool CAudio::startAuxOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
 
-    stopMasterOut();
-    std::lock_guard<std::mutex> lock(audioMutex);
     dummy = false;
 
     AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_id = deviceId;
@@ -389,6 +385,7 @@ void CAudio::startProcessing() {
 
 void CAudio::processMasterOutSamples(std::vector<float>& _block, bool* _dataprocessed) {
 
+    ZoneScopedN("processMasterOutSamples");
     MultiChannelRingBuffer* InputMasterMixed = AUDIO_MIXER.getMasterProcessBuffer();
 
     const size_t channels = 2;
@@ -602,14 +599,11 @@ void CAudio::stopMasterOut() {
             masterdummyTimerThread.join();
         }
     }
-
-    DEJAVISUI_LOG_DEBUG("STOPPING MASTER OUT");
     if (outputStream) {
         Pa_StopStream(outputStream);
         Pa_CloseStream(outputStream);
         outputStream = nullptr;
     }
-    
     AUDIO_MIXER.getMixerOutputItem(0)->Resampler.cleanup();
 	AUDIO_MIXER.getMixerOutputItem(0)->buffer->reset();
 

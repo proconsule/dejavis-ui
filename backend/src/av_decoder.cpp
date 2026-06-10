@@ -112,7 +112,7 @@ bool CAV_DECODER::InitFFmpegVulkanHW()
     vkCtx->enabled_dev_extensions     = m_ctx->devExt.data();    // deve restare vivo
     vkCtx->nb_enabled_dev_extensions  = (int)m_ctx->devExt.size();
 
-    // --- Queue families (qf[] = via principale su FFmpeg >= 6.1) ---------------
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 34, 100)
     int n = 0;
     auto addQF = [&](uint32_t idx, int num, VkQueueFlagBits flags,
                      VkVideoCodecOperationFlagBitsKHR vcaps)
@@ -143,7 +143,7 @@ bool CAV_DECODER::InitFFmpegVulkanHW()
     // --- Campi deprecati: la struct e' zero-init, ma 0 e' un indice VALIDO,
     //     quindi su versioni transitorie va riempito esplicitamente per non far
     //     credere a FFmpeg che la family 0 sia tx/comp/decode.
-#if FF_API_VULKAN_FIXED_QUEUES
+#else
     vkCtx->queue_family_index        = (int)m_ctx->graphicsQueueFamily; vkCtx->nb_graphics_queues = 1;
     vkCtx->queue_family_tx_index     = (int)m_ctx->transferQueueFamily; vkCtx->nb_tx_queues       = 1;
     vkCtx->queue_family_comp_index   = (int)m_ctx->computeQueueFamily;  vkCtx->nb_comp_queues     = 1;

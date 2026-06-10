@@ -66,6 +66,9 @@
 
 #include "vulkan_utils.h"
 
+#include <tracy/Tracy.hpp>
+#include <tracy/TracyVulkan.hpp>
+
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 struct Vulkan_ShaderCompileResult {
@@ -212,6 +215,8 @@ public:
     std::vector<VulkanUniTexture> videoTextures{10};
     std::vector<VideoMixerProp> videoMixerTextures{10};
 
+
+	TracyVkCtx tracy_ctx;
 
     bool initVideoMixer();
     void drawTestOverlay(VkCommandBuffer cmd, VkDescriptorSet textureSet);

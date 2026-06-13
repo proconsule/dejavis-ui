@@ -844,7 +844,6 @@ void CRenderer::Render() {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 
-    //TracyVkZone(tracy_ctx, cmd, "IMGUI");
     {
         ImGui_Render();
         ZoneScopedN("ImGui_Render (CPU)");

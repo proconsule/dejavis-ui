@@ -93,11 +93,13 @@ int main(int argc, char* argv[]) {
 
     std::string audiopath = audio_config["file_path"].asString();
     milkplaylistdb.Init(configpath + "projectm_milk.db");
-
+/*
     if (!Audio.startMasterDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Master Dummy");
         return -1;
     }
+
+*/
     if (!Audio.startAuxDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Aux Dummy");
         return -1;
@@ -110,15 +112,16 @@ int main(int argc, char* argv[]) {
 
 
     Audio.m_projectm_wrapper = &projectm_wrapper;
-//    Audio.startMasterOutput(Audio.getDefaultOutput(),2,48000);
+//
+    //Audio.startMasterOutput(Audio.getDefaultOutput(),2,48000);
 
-    Audio.startProcessing();
 
     Audio.m_penedingAudioDevLoad.deviceid = Audio.getDefaultOutput();
     Audio.m_penedingAudioDevLoad.samplerate = 48000;
+    Audio.m_penedingAudioDevLoad.outputtype = 0;
     Audio.m_penedingAudioDevLoad.channels = 2;
     Audio.m_penedingAudioDevLoad.shouldLoad.store(true);
-
+    Audio.startProcessing();
 
     Audio.fileplayers_basepath = audiopath.c_str();
 
@@ -252,16 +255,7 @@ int main(int argc, char* argv[]) {
             app().run();
         }
     });
-
-
-#ifdef _WIN32
-    //Audio.AUDIO_MIXER.getMixerInputItem(0)->fileplayer->LoadFile("C:\\msys64\\home\\ceco\\testaudio\\Queen\\Albums\\1984 - The Works (2CD)\\CD1\\09 - Is This The World We Created....flac");
-    //Audio.AUDIO_MIXER.getMixerInputItem(0)->fileplayer->Play();
-#else
-    //Audio.loadAudioFile("/home/ceco/testaudio/Gigi D'Agostino - The Riddle ( Official Video ) - GIGI D'AGOSTINO.mp3");
-#endif
-
-
+    
     while(running) {
         HandleRenderChanges();
         if(Renderer.gpu_active){

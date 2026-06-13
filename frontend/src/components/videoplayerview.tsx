@@ -29,12 +29,16 @@ export function VideoPlayerView({ audio_mixer_idx,video_mixer_idx, sendSignal }:
 
   //const decoder = video_input?.file_decoder;
   //const kbps = fileplayer?.bitrate ? Math.round(fileplayer?.bitrate / 1000) : 0;
-/*
 
-  console.log(audio_input);
-  console.log(video_input);
+
+  console.log(audio_mixer_idx);
+  console.log(video_mixer_idx);
   console.log(decoder);
-*/
+
+
+  useEffect(() => {
+    sendSignal({msgid: 5003,type: 3, idx: audio_mixer_idx});
+  },[]);
 
   useEffect(() => {
     if (lastJsonMessage?.msgid !== 1) return;

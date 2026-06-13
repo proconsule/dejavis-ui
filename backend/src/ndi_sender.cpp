@@ -8,10 +8,6 @@ CNDISender::CNDISender() {
 
 CNDISender::~CNDISender() {
     Stop();
-    {
-        std::lock_guard<std::mutex> lock(m_queueMutex);
-        m_running = false; // Diciamo al thread di fermarsi
-    }
     m_cv.notify_all(); // Lo svegliamo se sta dormendo sulla wait
 
     if (m_workerThread.joinable()) {
@@ -98,8 +94,8 @@ bool CNDISender::Init_VideoAudio(VulkanContext* ctx, std::string channelName, in
     m_ctx = ctx;
     m_width = w;
     m_height = h;
-    m_audioSR = 48000;
-    m_audioCh = 2;
+    m_audioSR = audioSR;
+    m_audioCh = audioCh;
     audioonly = false;
 
     // 1. Crea istanza Sender
@@ -116,7 +112,8 @@ bool CNDISender::Init_VideoAudio(VulkanContext* ctx, std::string channelName, in
     // 2. Prepara buffer di lettura
     createReadbackBuffer(w, h);
 
-    m_running = true;
+    m_video_running = true;
+    m_audio_running = true;
     m_workerThread = std::thread(&CNDISender::NDIWorkerThread, this);
     m_audioWorkerThread = std::thread(&CNDISender::NDIWorkerThread_Audio, this);
 #ifdef _WIN32
@@ -222,7 +219,7 @@ bool CNDISender::Init_AudioOnly(std::string channelName) {
     m_pNDI_send = NDIlib_send_create(&desc);
     if (!m_pNDI_send) return false;
 
-    m_running = true;
+    m_audio_running = true;
     m_workerThread = std::thread(&CNDISender::NDIWorkerThread_Audio, this);
     DEJAVISUI_LOG_DEBUG("Created NDI AudioOnly Output");
 
@@ -333,12 +330,12 @@ void CNDISender::SendMuxedFrame(RGB2YUVSlotResources& slot) {
 void CNDISender::NDIWorkerThread() {
 
     std::vector<uint8_t> nv12_buffer;
-    while (m_running) {
+    while (m_video_running) {
         RGB2YUVSlotResources* slot = nullptr;
         {
             std::unique_lock<std::mutex> lock(m_queueMutex);
-            m_cv.wait(lock, [this] { return !m_packetQueue.empty() || !m_running; });
-            if (!m_running && m_packetQueue.empty()) break;
+            m_cv.wait(lock, [this] { return !m_packetQueue.empty() || !m_video_running; });
+            if (!m_video_running && m_packetQueue.empty()) break;
 
             slot = m_packetQueue.front();
             m_packetQueue.pop();
@@ -399,20 +396,20 @@ void CNDISender::NDIWorkerThread_Audio() {
     // Buffer contiguo per NDI: [ch0 ...][ch1 ...]
     std::vector<float> ndi_buffer(SAMPLES_PER_CH * 2);
 
-    while (m_running) {
+    while (m_audio_running) {
         // Aspetta fino a quando c'è almeno un blocco o stiamo chiudendo.
         // wait_for con timeout = safety net contro CV mancata (raro ma possibile).
         {
             std::unique_lock<std::mutex> lock(m_audioCvMutex);
             m_audioCv.wait_for(lock, std::chrono::milliseconds(5), [this] {
-                return !m_running
+                return !m_audio_running
                     || audio_rignbuffer_planar.getAvailableRead() >= (size_t)SAMPLES_PER_CH;
             });
         }
-        if (!m_running) break;
+        if (!m_audio_running) break;
         if (!m_pNDI_send) continue;
 
-        while (m_running &&
+        while (m_audio_running &&
                audio_rignbuffer_planar.getAvailableRead() >= (size_t)SAMPLES_PER_CH)
         {
             float* tempIn[2] = {
@@ -442,7 +439,8 @@ void CNDISender::NDIWorkerThread_Audio() {
 }
 
 void CNDISender::Stop() {
-    m_running = false;
+    m_video_running = false;
+    m_audio_running = false;
     m_cv.notify_all();         // sveglia video
     m_audioCv.notify_all();    // sveglia audio
 
@@ -456,7 +454,7 @@ void CNDISender::Stop() {
 }
 
 void CNDISender::Stop_Audio() {
-    m_running = false;
+    m_audio_running = false;
     m_audioCv.notify_all();
     if (m_audioWorkerThread.joinable()) m_audioWorkerThread.join();
 }

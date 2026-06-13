@@ -56,7 +56,15 @@ public:
     void Stop_Audio();
 
     bool isRunning() {
-        return m_running;
+        return m_audio_running||m_video_running;
+    }
+
+    bool isVideoRunning() {
+        return m_video_running;
+    }
+
+    bool isAudioRunning() {
+        return m_audio_running;
     }
 
     RGB2YUVSlotResources* acquireSlot();
@@ -107,8 +115,8 @@ private:
     std::condition_variable m_audioCv;
     std::mutex              m_audioCvMutex;
 
-    std::atomic<bool> m_running{false};   // era: bool m_running = false;
-
+    std::atomic<bool> m_video_running{false};
+    std::atomic<bool> m_audio_running{false};
 
     std::vector<std::unique_ptr<RGB2YUVSlotResources>> m_slots;
 

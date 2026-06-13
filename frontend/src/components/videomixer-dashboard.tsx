@@ -660,17 +660,20 @@ export function VideoMixerDashboard() {
                                 if (isSelected && activeTab === 'transform') {
                                     const editScaleX = input.keepaspect ? rendered.sx : input.scale_x;
                                     const editScaleY = input.keepaspect ? rendered.sy : input.scale_y;
+                                    const boxW = editScaleX * displayW;
+                                    const boxH = editScaleY * displayH;
 
                                     return (
                                         <Rnd
                                             key={input.originalIndex}
                                             style={{ zIndex: input.layer + 100 }}
-                                            size={{ width: editScaleX * displayW, height: editScaleY * displayH }}
+                                            size={{ width: boxW, height: boxH }}
                                             position={{
                                                 x: ndcCenterToPixelTopLeft(input.pos_x, editScaleX, displayW),
                                                 y: ndcCenterToPixelTopLeft(input.pos_y, editScaleY, displayH),
                                             }}
                                             disableDragging={isPicking}
+                                            lockAspectRatio={input.keepaspect ? boxW / boxH : false}
                                             onDragStop={(_e, d) => {
                                                 updateInput(selectedIndex, {
                                                     pos_x: pixelToNdcCenter(d.x, displayW, editScaleX),
@@ -678,12 +681,21 @@ export function VideoMixerDashboard() {
                                                 });
                                             }}
                                             onResizeStop={(_e, _dir, ref, _delta, pos) => {
-                                                updateInput(selectedIndex, {
-                                                    scale_x: ref.offsetWidth / displayW,
-                                                    scale_y: ref.offsetHeight / displayH,
-                                                    pos_x: pixelToNdcCenter(pos.x, displayW, ref.offsetWidth / displayW),
-                                                    pos_y: pixelToNdcCenter(pos.y, displayH, ref.offsetHeight / displayH),
-                                                });
+                                                const newSx = ref.offsetWidth / displayW;
+                                                const newSy = ref.offsetHeight / displayH;
+                                                const next: Partial<MixerInput> = {
+                                                    pos_x: pixelToNdcCenter(pos.x, displayW, newSx),
+                                                    pos_y: pixelToNdcCenter(pos.y, displayH, newSy),
+                                                };
+                                                if (input.keepaspect) {
+                                                    const base = Math.max(newSx, newSy);
+                                                    next.scale_x = base;
+                                                    next.scale_y = base;
+                                                } else {
+                                                    next.scale_x = newSx;
+                                                    next.scale_y = newSy;
+                                                }
+                                                updateInput(selectedIndex, next);
                                             }}
                                         >
                                             <div className={`w-full h-full border-2 ${itemTm.borderColor} relative`}>

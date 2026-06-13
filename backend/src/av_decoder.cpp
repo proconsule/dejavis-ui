@@ -468,6 +468,7 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
     m_present_thread      = std::thread(&CAV_DECODER::presentLoop,     this);
 
     play();
+    isPlaying = true;
     return true;
 }
 
@@ -743,7 +744,7 @@ void CAV_DECODER::decodeLoop() {
                         av_frame_unref(m_audio_frame);
                     }
                 }
-
+                isPlaying = false;
                 if (m_loopEnabled.load()) {
                     m_seekRequested.store(true);
                     m_seekTargetSeconds.store(0.0);
@@ -753,6 +754,7 @@ void CAV_DECODER::decodeLoop() {
                     m_frame_cv.notify_all();
                     break;
                 }
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             } else {
                 DEJAVISUI_LOG_ERROR("av_read_frame error: %d", ret);

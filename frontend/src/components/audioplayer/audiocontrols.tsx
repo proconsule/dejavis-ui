@@ -37,124 +37,115 @@ export function AudioControls({
   };
 
   return (
-    <div className="flex flex-col gap-4 pt-6 pb-2 px-2 border-t border-white/10 bg-black/20 rounded-b-xl">
-      
-      {/* 1. Top Row: Progress Bar & Timestamps */}
-      <div className="space-y-1.5">
-        <Slider 
-          // Il valore dello slider è ora la posizione attuale in secondi
-          value={[position]} 
-          // Il massimo è la durata totale del brano
-          max={duration > 0 ? duration : 100} 
-          step={0.1}
-          className="cursor-pointer"
-          // Invia il valore in secondi (double)
-          onValueChange={handleSeek}
-        />
-        <div className="flex justify-between px-1 font-mono text-[10px] font-black tracking-tighter text-slate-500">
-          <span className={isPlaying ? "text-purple-400" : ""}>{formatTime(position)}</span>
-          <span>{formatTime(duration)}</span>
-        </div>
-      </div>
+      <div className="flex flex-col up-tracking-wider">
 
-      {/* 2. Bottom Row: Centralized Controls */}
-      <div className="flex items-center justify-between">
-        
-        {/* Lato Sinistro: Engine Status */}
-        <div className="w-1/4">
-          <div className="flex items-center gap-2">
-            <div className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              isPlaying ? "bg-green-500 animate-pulse shadow-[0_0_8px_#22c55e]" : "bg-slate-600"
-            )} />
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
-              {isPlaying ? 'Active' : 'Idle'}
-            </span>
+        {/* 1. Timeline & Progress - Rendering as a distinct section */}
+        <div className="px-6 py-4 bg-black/40 border-b border-white/5 w-full">
+          <div className="flex items-center gap-4 mb-2">
+              <span className={cn("font-mono text-[10px] font-medium", isPlaying ? "text-purple-400" : "text-slate-500")}>
+                {formatTime(position)}
+              </span>
+            <Slider
+                value={[position]}
+                max={duration > 0 ? duration : 100}
+                step={0.1}
+                className="flex-1 h-2 cursor-pointer selection:bg-purple-500"
+                onValueChange={handleSeek}
+            />
+            <span className="font-mono text-[10px] font-medium text-slate-500">
+                {formatTime(duration)}
+              </span>
           </div>
         </div>
 
-        {/* Centro: Main Control Hub */}
-        <div className="flex items-center gap-4 bg-white/[0.03] p-1.5 rounded-2xl border border-white/[0.05]">
+        {/* 2. Main Controls - Integrated surface */}
+        <div className="flex items-center justify-center gap-6 p-8 relative">
 
-
-
-          <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                  "h-6 w-6 rounded-full transition-all relative",
-                  repeatMode > 0 ? "text-purple-400 bg-purple-500/10" : "text-slate-500 opacity-50"
-              )}
-              onClick={() => sendSignal({ msgid: 5007, idx: inputidx })}
-          >
-            <ArrowLeftToLine className="h-4 w-4" />
-          </Button>
-
-          <Button 
-            variant="ghost"
-            size="icon" 
-            className="h-8 w-8 rounded-full hover:bg-red-500/10 text-slate-400 hover:text-red-500"
-            onClick={() => handleStop()}
-          >
-            <Square className="h-4 w-4 fill-current" />
-          </Button>
-
-          <Button 
-            size="icon" 
-            className="h-8 w-8 rounded-full bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.3)] transform hover:scale-105 transition-all"
-            onClick={() => sendSignal({ command: isPlaying ? "pausefile" : "playfile" })}
-          >
-            {isPlaying ? <Pause className="h-6 w-6 fill-current" /> : <Play className="h-6 w-6 fill-current ml-1" />}
-          </Button>
-
-          <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                  "h-6 w-6 rounded-full transition-all relative",
-                  repeatMode > 0 ? "text-purple-400 bg-purple-500/10" : "text-slate-500 opacity-50"
-              )}
-              onClick={() => sendSignal({ msgid: 5006, idx: inputidx })}
-          >
-            <ArrowRightToLine className="h-4 w-4" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-6 w-6 rounded-full transition-all relative",
-              repeatMode > 0 ? "text-purple-400 bg-purple-500/10" : "text-slate-500 opacity-50"
-            )}
-            onClick={() => sendSignal({ command: "set_repeat", value: (repeatMode + 1) % 3 })}
-          >
-            {repeatMode === 1 ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
-            {repeatMode > 0 && (
-              <span className="absolute -bottom-1 right-0 text-[7px] font-bold bg-purple-500 text-white px-1 rounded-full border border-black">
-                {repeatMode === 1 ? '1' : 'A'}
+          {/* Integrating "Engine Status" more subtly */}
+          <div className="absolute left-6 flex items-center gap-2 opacity-40 hover:opacity-100 transition-opacity uppercase">
+            <div className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                isPlaying ? "bg-green-500 animate-pulse ring-4 ring-green-500/20" : "bg-slate-700"
+            )} />
+            <span className="text-[8px] font-black tracking-widest text-slate-400">
+                {isPlaying ? 'Playing' : 'Stopped'}
               </span>
-            )}
+          </div>
+
+          {/* Previous/Next block */}
+          <div className="flex items-center gap-2 scale-90">
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-slate-400 hover:text-purple-500"
+                onClick={() => sendSignal({ msgid: 5007, idx: inputidx })}
+            >
+              <ArrowLeftToLine className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Center Play/Pause Group */}
+          <div className="flex items-center gap-4">
+            <Button
+                variant="ghost"
+                className="h-10 w-10 rounded-full border border-white/5 text-slate-500 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                onClick={() => handleStop()}
+            >
+              <Square className="h-4 w-4 fill-current" />
+            </Button>
+
+            <Button
+                className="h-14 w-14 rounded-full bg-purple-600 text-white hover:bg-purple-500 shadow-xl hover:shadow-purple-500/20 transition-all active:scale-95"
+                onClick={() => sendSignal({ command: isPlaying ? "pausefile" : "playfile" })}
+            >
+              {isPlaying ? <Pause className="h-7 w-7 fill-current" /> : <Play className="h-7 w-7 fill-current ml-1" />}
+            </Button>
+
+            <div className="flex items-center justify-center w-10" /> {/* Balance internal spacing */}
+          </div>
+
+          {/* Next/Shuffle/Repeat block */}
+          <div className="flex items-center gap-2 scale-90">
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-slate-400 hover:text-purple-500"
+                onClick={() => sendSignal({ msgid: 5006, idx: inputidx })}
+            >
+              <ArrowRightToLine className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* 3. Tertiary Advanced Controls row with borders */}
+        <div className="flex items-center justify-center gap-4 p-3 border-t border-white/10 bg-white/[0.03] text-slate-500">
+          <Button
+              variant="ghost"
+              className={cn("h-7 px-2 text-[10px] rounded-full border border-white/10 hover:border-purple-500",
+                  repeatMode > 0 ? "text-purple-400 border-purple-500/50" : ""
+              )}
+              onClick={() => sendSignal({ command: "set_repeat", value: (repeatMode + 1) % 3 })}
+          >
+            {repeatMode === 1 ? <Repeat1 className="h-3 w-3 mr-1" /> : <Repeat className="h-3 w-3 mr-1" />}
+            Repeat {repeatMode === 1 ? '1' : 'All'}
           </Button>
 
           <Button
               variant="ghost"
-              size="icon"
-              className={cn(
-                  "h-6 w-6 rounded-full transition-all",
-                  isShuffle ? "text-purple-400 bg-purple-500/10" : "text-slate-500 opacity-50"
+              className={cn("h-7 px-2 text-[10px] rounded-full border border-white/10 hover:border-purple-500",
+                  isShuffle ? "text-purple-400 border-purple-500/50" : ""
               )}
               onClick={() => sendSignal({ command: "set_shuffle", value: !isShuffle })}
           >
-            <Shuffle className="h-4 w-4" />
+            <Shuffle className="h-3 w-3 mr-1" />
+            Shuffle
           </Button>
-        </div>
 
-        {/* Lato Destro: Volume o Placeholder */}
-        <div className="w-1/4 flex justify-end">
-           <span className="text-[8px] font-mono text-slate-700 uppercase tracking-widest">DejaVu Logic v3</span>
+          <div className="pl-4 border-l border-white/10 flex items-center gap-1.5 opacity-30 group hover:opacity-100 transition-opacity">
+            <span className="text-[8px] font-mono uppercase tracking-tighter">System Update Loaded</span>
+            <span className="text-[8px] font-mono uppercase tracking-tighter">v3.0.1-rc</span>
+          </div>
         </div>
-
       </div>
-    </div>
   )
 }

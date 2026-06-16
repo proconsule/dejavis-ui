@@ -16,6 +16,7 @@
 #include "../video/projectm_wrapper.h"
 
 #include "webrtc_broadcaster.h"
+#include "backend/src/unimixer.h"
 
 using namespace drogon;
 
@@ -115,6 +116,8 @@ class CWebSocket : public drogon::WebSocketController<CWebSocket>
 	static CAV_ENCODER *AV_ENCODER;
 
 	static cprojectm_wrapper *m_projectm_wrapper;
+
+	static cunimixer *m_cunimixer;
 
 	static std::shared_ptr<WebRTCBroadcaster> Broadcaster;
     void handleNewMessage(const WebSocketConnectionPtr &,

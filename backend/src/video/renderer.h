@@ -69,6 +69,8 @@
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
+
+
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 struct Vulkan_ShaderCompileResult {
@@ -77,7 +79,7 @@ struct Vulkan_ShaderCompileResult {
     uint32_t complexity;
 };
 
-struct VideoMixerProp {
+struct videomixeritem {
     float pos_x = 0.0f, pos_y = 0.0f, scale_x = 1.0f, scale_y = 1.0f, alpha = 1.0f;
     bool y_flip = false;
     bool inUse = false;
@@ -177,6 +179,7 @@ public:
 
 	cprojectm_wrapper  * m_projectm_wrapper = nullptr;
 
+
 // SDL2 PART
     bool Init_SDL_Window(uint32_t _w,uint32_t _h);
     bool CreateFences();
@@ -213,14 +216,14 @@ public:
     int win_pos_y = 0;
 
     std::vector<VulkanUniTexture> videoTextures{10};
-    std::vector<VideoMixerProp> videoMixerTextures{10};
+    std::vector<videomixeritem> videoMixerTextures{10};
 
 
 	TracyVkCtx tracy_ctx;
 
     bool initVideoMixer();
     void drawTestOverlay(VkCommandBuffer cmd, VkDescriptorSet textureSet);
-	void drawMixerVideoLayer(VkCommandBuffer cmd,VideoMixerProp *_mixerprop,VulkanUniTexture &_texture);
+	void drawMixerVideoLayer(VkCommandBuffer cmd,videomixeritem *_mixerprop,VulkanUniTexture &_texture);
 
     void drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
                                float x, float y, float scaleX, float scaleY,
@@ -233,7 +236,7 @@ public:
     bool AddImageToMixer(const unsigned char* img_data,int img_size,bool isHDR);
     void RemoveImageFromMixer(int slot);
 
-    void SetVideoMixerProps(VideoMixerProp &prop,int _mixerid);
+    void SetVideoMixerProps(videomixeritem &prop,int _mixerid);
     bool AddAVDecoderToMixer(std::string url, int _mixerid);
 
 	bool AddNDIToMixer(int _mixerid);
@@ -276,7 +279,7 @@ public:
 
 	void SetKeyer(int _mixeridx,FxKeyerMode _keyer);
 
-    VideoMixerProp GetTestVideoMixer();
+    videomixeritem GetTestVideoMixer();
     Json::Value GetVideoMixerJson();
 
     VkDescriptorSet createTextureDescriptor(VkImageView imageView);

@@ -7,6 +7,7 @@ cmilkplaylistdb* CWebSocket::milkPlaylistDB = nullptr;
 CAV_ENCODER* CWebSocket::AV_ENCODER = nullptr;
 cprojectm_wrapper* CWebSocket::m_projectm_wrapper = nullptr;
 std::shared_ptr<WebRTCBroadcaster> CWebSocket::Broadcaster = nullptr;
+cunimixer* CWebSocket::m_cunimixer = nullptr;
 
 std::vector<WebSocketConnectionPtr> CWebSocket::clients;
 std::mutex CWebSocket::clientsMutex;
@@ -159,36 +160,37 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_VOLUME){
 			int _inputidx = json["inputidx"].asInt();
 			float _val = json["value"].asFloat();
-			Audio->AUDIO_MIXER.SetInputVolume(_inputidx,_val);
-
+			//Audio->AUDIO_MIXER.SetInputVolume(_inputidx,_val);
+			m_cunimixer->SetInputVolume(_inputidx,_val);
 		}
 
 		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_ID){
 			int _inputidx = json["inputidx"].asInt();
 			int _val = json["value"].asInt();
-			Audio->AUDIO_MIXER.SetInputMixerID(_inputidx,_val);
-
+			//Audio->AUDIO_MIXER.SetInputMixerID(_inputidx,_val);
+			m_cunimixer->SetInputMixerID(_inputidx,_val);
 		}
 
 		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_GAIN){
 			int _inputidx = json["inputidx"].asInt();
 			int _val = json["value"].asInt();
-			Audio->AUDIO_MIXER.setGainFactor(_inputidx,static_cast<GainPreset>(_val));
+			m_cunimixer->setInputGainFactor(_inputidx,static_cast<GainPreset>(_val));
+			//Audio->AUDIO_MIXER.setGainFactor(_inputidx,static_cast<GainPreset>(_val));
 
 		}
 
 		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_MUTE){
 			int _inputidx = json["inputidx"].asInt();
 			int _val = json["value"].asBool();
-			Audio->AUDIO_MIXER.SetInputMute(_inputidx,_val);
-
+			//Audio->AUDIO_MIXER.SetInputMute(_inputidx,_val);
+			m_cunimixer->SetInputMute(_inputidx,_val);
 		}
 
 
 		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_SOLO){
 			int _inputidx = json["inputidx"].asInt();
 			int _val = json["value"].asBool();
-			Audio->AUDIO_MIXER.SetInputSolo(_inputidx,_val);
+			m_cunimixer->SetInputSolo(_inputidx,_val);
 
 		}
 
@@ -196,10 +198,12 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int outputidx = json["outputidx"].asInt();
 			float _val = json["value"].asFloat();
 			if (outputidx == 0) {
-				Audio->AUDIO_MIXER.SetMasterVolume(_val);
+				m_cunimixer->SetMasterVolume(_val);
+				//Audio->AUDIO_MIXER.SetMasterVolume(_val);
 			}
 			if (outputidx == 1) {
-				Audio->AUDIO_MIXER.SetAuxVolume(_val);
+				m_cunimixer->SetAuxVolume(_val);
+				//Audio->AUDIO_MIXER.SetAuxVolume(_val);
 			}
 		}
 
@@ -208,10 +212,12 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int outputidx = json["outputidx"].asInt();
 			float _val = json["value"].asFloat();
 			if (outputidx == 0) {
-				Audio->AUDIO_MIXER.SetMasterPan(_val);
+				m_cunimixer->SetMasterPan(_val);
+				//Audio->AUDIO_MIXER.SetMasterPan(_val);
 			}
 			if (outputidx == 1) {
-				Audio->AUDIO_MIXER.SetAuxPan(_val);
+				m_cunimixer->SetAuxPan(_val);
+				//Audio->AUDIO_MIXER.SetAuxPan(_val);
 			}
 		}
 
@@ -451,15 +457,23 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int inputtype = json["type"].asInt();
 			int _mixerid = json["inputidx"].asInt();
 			if (inputtype ==  0) {
-				Audio->AUDIO_MIXER.AddPlayerToMixer(Audio->fileplayers_basepath,_mixerid);
+				m_cunimixer->p_audioplayerLoad.mixerid = _mixerid;
+				m_cunimixer->p_audioplayerLoad.shouldLoad = true;
+				//m_cunimixer->AddAudioPlayer(_mixerid);
+				//Audio->AUDIO_MIXER.AddPlayerToMixer(Audio->fileplayers_basepath,_mixerid);
 				//Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer->LoadFile("C:\\msys64\\home\\ceco\\testaudio\\Queen\\Albums\\1984 - The Works (2CD)\\CD1\\09 - Is This The World We Created....flac");
 				//Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer->Play();
 			}
 			if (inputtype ==  3) {
-				Renderer->m_pendingInputLoad.url = Renderer->fileplayers_basepath;
-				Renderer->m_pendingInputLoad.mixerid = _mixerid;
-				Renderer->m_pendingInputLoad.shouldLoad = true;
+				//Renderer->m_pendingInputLoad.url = Renderer->fileplayers_basepath;
+				//Renderer->m_pendingInputLoad.mixerid = _mixerid;
+				//Renderer->m_pendingInputLoad.shouldLoad = true;
 				//Renderer->AddVideoFilePlayerToMixer(Audio->fileplayers_basepath,_mixerid);
+				m_cunimixer->p_videoPlayerLoad.audio_mixerid = _mixerid;
+				m_cunimixer->p_videoPlayerLoad.video_mixerid = -1;
+				m_cunimixer->p_videoPlayerLoad.shouldLoad = true;
+
+
 			}
 
 			if (inputtype ==  4) {
@@ -485,8 +499,10 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			if (type == 0) {
 				Audio->AUDIO_MIXER.RemoveFromMixer(_mixerid);
 			}else if (type == 3) {
-				Renderer->m_peningUnload.mixerid = _mixerid;
-				Renderer->m_peningUnload.shouldUnLoad = true;
+				//Renderer->m_peningUnload.mixerid = _mixerid;
+				//Renderer->m_peningUnload.shouldUnLoad = true;
+				m_cunimixer->p_videoMixerUnLoad.audio_mixerid = _mixerid;
+				m_cunimixer->p_videoMixerUnLoad.shouldUnLoad = true;
 			}else if (type == 5) {
 				int videomixeridx = Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->videomixer_idx;
 				Renderer->m_pendingNDI_Unload.mixerid = videomixeridx;
@@ -502,7 +518,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			std::string mypath = json["path"].asString();
 
 			if (_type == 0) {
-				caudioplayer * player = Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
+				caudioplayer * player = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
 
 				if (player) {
 					Json::Value fb_json = player->FileBrowser.browse(mypath);
@@ -512,7 +528,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 				}
 			}
 			if (_type == 3) {
-				int videomixerid = Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->videomixer_idx;
+				int videomixerid = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->videomixer_idx;
 				CAV_DECODER *avdecoder =  Renderer->videoMixerTextures[videomixerid].AV_DECODER;
 
 				if (avdecoder) {
@@ -530,7 +546,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int _type = json["type"].asInt();
 
 			if (_type == 0) {
-				caudioplayer * player = Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
+				caudioplayer * player = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
 
 				if (player) {
 					std::string path = json["path"].asString();
@@ -539,10 +555,13 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 				}
 			}
 			if (_type == 3) {
-				Renderer->m_pendingLoad.mixerid = _mixerid;
 				std::string path = json["path"].asString();
-				Renderer->m_pendingLoad.url = path;
-				Renderer->m_pendingLoad.shouldLoad = true;
+
+				m_cunimixer->p_videoPlayerFileLoad.audio_mixerid = _mixerid;
+				m_cunimixer->p_videoPlayerFileLoad.video_mixerid = -1;
+				m_cunimixer->p_videoPlayerFileLoad.path = path;
+				m_cunimixer->p_videoPlayerFileLoad.shouldLoad = true;
+
 			}
 
 		}
@@ -554,14 +573,14 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int _type = json["type"].asInt();
 			double secs = json["sec"].asDouble();
 			if (_type == 0) {
-				caudioplayer * player = Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
+				caudioplayer * player = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
 
 				if (player) {
 					player->Seek(secs);
 				}
 			}
 			if (_type == 3) {
-				int videoidx = Audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->videomixer_idx;
+				int videoidx = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->videomixer_idx;
 				Renderer->videoMixerTextures[videoidx].AV_DECODER->seek(secs);
 			}
 
@@ -582,12 +601,12 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int _samplerate = json["samplerate"].asInt();
 			int _channels = json["channels"].asInt();
 
-			Audio->startMixerInput(_mixerid,_deviceid,_channels,_samplerate);
+			m_cunimixer->audio_ref->startMixerInput(_mixerid,_deviceid,_channels,_samplerate);
 
 		}
 		if (getMsgId(json) == DEJAVISUI_MSGID::AUDIO_MIXER_LIVE_INPUT_STOP) {
 			int _mixerid = json["inputidx"].asInt();
-			Audio->stopMixerInput(_mixerid);
+			m_cunimixer->audio_ref->stopMixerInput(_mixerid);
 
 		}
 
@@ -598,33 +617,20 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int deviceId = json["devid"].asInt();
 			uint32_t channels = json["channels"].asUInt();
 			uint32_t samplerate = json["samplerate"].asUInt();
-			Audio->m_penedingAudioDevLoad.deviceid = deviceId;
-			Audio->m_penedingAudioDevLoad.outputtype = 0;
-			if (mytype == 0 ) Audio->m_penedingAudioDevLoad.deviceid == -1;
-			Audio->m_penedingAudioDevLoad.samplerate = samplerate;
-			Audio->m_penedingAudioDevLoad.channels = channels;
-			Audio->m_penedingAudioDevLoad.shouldLoad.store(true);
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid = deviceId;
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.outputtype = 0;
+			if (mytype == 0 ) m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid == -1;
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.samplerate = samplerate;
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.channels = channels;
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.shouldLoad.store(true);
 
-
-			//Audio->stopMasterOut();
-			/*
-			if (mytype == 0 && myidx == 0) {
-				Audio->startMasterDummy();
-			}
-			if (mytype == 1 && myidx == 0) {
-				int deviceId = json["devid"].asInt();
-
-
-				bool success = Audio->startMasterOutput(deviceId, channels, samplerate);
-			}
-			*/
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_VISIBLE) {
 			int inputidx = json["input_index"].asInt();
 			bool inputstatus = json["isVisible"].asBool();
 
-			Renderer->videoMixerTextures[inputidx].isVisible = inputstatus;
+			m_cunimixer->video_ref->videoMixerTextures[inputidx].isVisible = inputstatus;
 		}
 
 
@@ -641,7 +647,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			params.softness  = data.get("softness", 0.1f).asFloat();
 			params.spill     = data.get("spill", 0.5f).asFloat();
 			params.enabled   = data.get("enabled", 0.0f).asFloat();
-			Renderer->SetChromaKey(video_mixer_idx,params);
+			m_cunimixer->SetChromaKey(video_mixer_idx,params);
 
 		}
 
@@ -656,7 +662,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			params.upper = data.get("upper", 1.0f).asFloat();
 			params.softness  = data.get("softness", 0.1f).asFloat();
 			params.enabled   = data.get("enabled", 0.0f).asFloat();
-			Renderer->SetLumaKey(video_mixer_idx,params);
+			m_cunimixer->SetLumaKey(video_mixer_idx,params);
 		}
 
 
@@ -672,27 +678,21 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			params.blackLevel = data.get("blackLevel", 0.0f).asFloat();
 			params.whiteLevel = data.get("whiteLevel", 1.0f).asFloat();
 			params.enabled    = data.get("enabled", 0.0f).asFloat();
-			Renderer->SetColor(video_mixer_idx,params);
-		}
-
-		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_COLOR_CTRL) {
-			ColorParams params;
-			int video_mixer_idx = json["input_index"].asInt();
-
+			m_cunimixer->SetColor(video_mixer_idx,params);
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_PROPS_UPDATE) {
 
 			int idx = json["input_index"].asInt();
 
-			VideoMixerProp tmpret =  Renderer->videoMixerTextures[idx];
+			videomixeritem tmpret =  Renderer->videoMixerTextures[idx];
 			tmpret.pos_x = json["pos_x"].asFloat();
 			tmpret.pos_y = json["pos_y"].asFloat();
 			tmpret.scale_x= json["scale_x"].asFloat();
 			tmpret.scale_y = json["scale_y"].asFloat();
 			tmpret.alpha = json["alpha"].asFloat();
 			tmpret.layer = json["layer"].asInt();
-			Renderer->SetVideoMixerProps(tmpret,idx);
+			m_cunimixer->SetVideoMixerProps(tmpret,idx);
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::NDI_SOURCE_LOAD) {
@@ -712,7 +712,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			//Audio->stopMixerInput(1);
 		}
 		if (json["command"].asString() == "stop_output_audio") {
-			Audio->stopMasterOut();
+			m_cunimixer->audio_ref->stopMasterOut();
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_IMAGE_UNLOAD) {

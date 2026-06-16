@@ -300,7 +300,7 @@ VkDescriptorSet CRenderer::createTextureDescriptor(VkImageView imageView) {
 */
 
 void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
-                                    VideoMixerProp* _mixerprop,
+                                    videomixeritem* _mixerprop,
                                     VulkanUniTexture& _texture) { // Parametro aggiunto
 
 
@@ -441,7 +441,7 @@ void CRenderer::drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
 
 void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
     for (int i = 0; i < 10; ++i) {
-        VideoMixerProp* p = &videoMixerTextures[i];
+        videomixeritem* p = &videoMixerTextures[i];
         if (!p->inUse) continue;            // ← gating unico, identico al drain
         if (!p->isVisible) continue;
 
@@ -469,12 +469,12 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
 
 void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
 
-    VideoMixerProp* sortedPtrs[10];
+    videomixeritem* sortedPtrs[10];
     for(int i = 0; i < 10; ++i) {
         sortedPtrs[i] = &videoMixerTextures[i];
     }
     std::stable_sort(std::begin(sortedPtrs), std::end(sortedPtrs),
-        [](VideoMixerProp* a, VideoMixerProp* b) {
+        [](videomixeritem* a, videomixeritem* b) {
             return a->layer < b->layer;
         });
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mixerPipeline);
@@ -491,7 +491,7 @@ void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
 
 
     for(int i = 0; i < 10; ++i) {
-        VideoMixerProp* p = sortedPtrs[i];
+        videomixeritem* p = sortedPtrs[i];
         //if (p->img_viewver) {
             //p->img_viewver->Render(cmd);
         //}
@@ -505,7 +505,7 @@ void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
 
 }
 
-void CRenderer::SetVideoMixerProps(VideoMixerProp &prop,int _mixerid) {
+void CRenderer::SetVideoMixerProps(videomixeritem &prop,int _mixerid) {
     videoMixerTextures[_mixerid].pos_x = prop.pos_x;
     videoMixerTextures[_mixerid].pos_y = prop.pos_y;
     videoMixerTextures[_mixerid].scale_x = prop.scale_x;
@@ -516,7 +516,7 @@ void CRenderer::SetVideoMixerProps(VideoMixerProp &prop,int _mixerid) {
 
 }
 
-VideoMixerProp CRenderer::GetTestVideoMixer() {
+videomixeritem CRenderer::GetTestVideoMixer() {
     return videoMixerTextures[0];
 }
 
@@ -542,7 +542,7 @@ void CRenderer::RemoveVideoFilePlayerFromMixer(int _audio_mixer_id) {
         decoderToDelete = videoMixerTextures[videoslot].AV_DECODER;
         videoMixerTextures[videoslot].AV_DECODER = nullptr;
         int originalidx = videoMixerTextures[videoslot].originalIdx;
-        videoMixerTextures[videoslot] = VideoMixerProp();
+        videoMixerTextures[videoslot] = videomixeritem();
         videoMixerTextures[videoslot].originalIdx = originalidx;
 
     }
@@ -606,7 +606,7 @@ void CRenderer::RemoveNDIFromVideoMixerID(int _video_mixer_id) {
         decoderToDelete = videoMixerTextures[_video_mixer_id].ndi_receiver;
         videoMixerTextures[_video_mixer_id].ndi_receiver = nullptr;
         int originalidx = videoMixerTextures[_video_mixer_id].originalIdx;
-        videoMixerTextures[_video_mixer_id] = VideoMixerProp();
+        videoMixerTextures[_video_mixer_id] = videomixeritem();
         videoMixerTextures[_video_mixer_id].originalIdx = originalidx;
 
     }
@@ -625,7 +625,7 @@ void CRenderer::RemoveNDIFromAudioMixerID(int _audio_mixer_id) {
         decoderToDelete = videoMixerTextures[videoslot].ndi_receiver;
         videoMixerTextures[videoslot].ndi_receiver = nullptr;
         int originalidx = videoMixerTextures[videoslot].originalIdx;
-        videoMixerTextures[videoslot] = VideoMixerProp();
+        videoMixerTextures[videoslot] = videomixeritem();
         videoMixerTextures[videoslot].originalIdx = originalidx;
 
     }
@@ -685,7 +685,7 @@ bool CRenderer::AddImageToMixer(const unsigned char* img_data,int img_size,bool 
 
 void CRenderer::RemoveImageFromMixer(int slot) {
     if (slot > 0 && slot < 10) {
-        videoMixerTextures[slot] = VideoMixerProp();
+        videoMixerTextures[slot] = videomixeritem();
         CleanupTexture(videoTextures[slot].VkTexture);
     }
 }
@@ -861,6 +861,8 @@ void CRenderer::VideoMixer_SyncInputs() {
 
     }
 
+    /*
+     *  DELEGATO A UNIMXIER via handleenevts
     if (m_pendingInputLoad.shouldLoad.load()) {
         m_pendingInputLoad.shouldLoad.store(false);
         AddVideoFilePlayerToMixer(m_pendingInputLoad.url,m_pendingInputLoad.mixerid);
@@ -878,7 +880,7 @@ void CRenderer::VideoMixer_SyncInputs() {
         m_peningUnload.shouldUnLoad.store(false);
         RemoveVideoFilePlayerFromMixer(m_peningUnload.mixerid);
     }
-
+    */
 
     if (m_pendingVideoUrlload.shouldLoad.load()) {
         m_pendingVideoUrlload.shouldLoad.store(false);

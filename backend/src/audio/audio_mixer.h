@@ -207,6 +207,9 @@ public:
 
     void AddPlayerToMixer(std::string _basepath,int _mixerid);
     void AddGenericToMixer(int _mixerd);
+
+    int GetFirstFreeSlot();
+
     void RemoveGenericToMixer(int _mixerd);
 
 
@@ -296,7 +299,7 @@ public:
     std::array<std::vector<float>, 2> m_masterRead;
     std::array<std::vector<float>, 2> m_auxRead;
 
-
+    std::mutex m_mixer_mutex;
 private:
     std::unique_ptr<RingBuffer> m_master_out;
     std::vector<std::unique_ptr<AudioMixerInputItem>> m_inputs;
@@ -305,7 +308,7 @@ private:
     AudioThreadPool mix_thread_pool{3};
 
     std::unique_ptr<MultiChannelRingBuffer> m_silence_buffer;
-    std::mutex m_mixer_mutex;
+
     int m_selected_idx = -1;
 
     static constexpr size_t SILENCE_CHUNK_FRAMES = 4096;

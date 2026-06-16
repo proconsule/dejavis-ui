@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
-project(dejavis-ui VERSION 1.0)
+project(dejavis-ui VERSION 0.0.1)
 
+if(WIN32)
+
+set(ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/dejavis-ui.ico")
+
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dejavis-ui.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/dejavis-ui.rc
+        @ONLY
+)
+endif()
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(TARGET_ARCH "x64")
@@ -301,7 +311,7 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/video/yuv2rgb/converters/YUV420PConverter.cpp
         backend/src/video/yuv2rgb/converters/NV12Converter.cpp
         backend/src/video/yuv2rgb/converters/P010Converter.cpp
-
+        backend/src/unimixer.cpp
 )
 
 
@@ -350,7 +360,7 @@ else()
             ${DEJAVISUI_COMMON_SOURCES}
             ${CERT_FILE}
             ${KEY_FILE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/assets/dejavis-ui.rc
+            ${CMAKE_CURRENT_BINARY_DIR}/dejavis-ui.rc
         )
     else()
         add_executable(dejavis-ui

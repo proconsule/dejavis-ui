@@ -34,6 +34,7 @@ extern "C" {
 #include "audio/macos_permissions.h"
 #endif
 
+#include "unimixer.h"
 
 CRenderer Renderer;
 CAudio Audio;
@@ -44,6 +45,8 @@ cprojectm_wrapper projectm_wrapper;
 
 cmilkplaylistdb milkplaylistdb;
 cuserconfig userconfig;
+
+cunimixer unimixer;
 
 bool running = true;
 
@@ -155,6 +158,10 @@ int main(int argc, char* argv[]) {
         Renderer.SetFullScreen(true);
     }
 
+    unimixer.Init(&Audio,&Renderer);
+    unimixer.setAudioBasePath(audio_config["file_path"].asString());
+    unimixer.setVideoBasePath(video_config["file_path"].asString());
+
 
     Renderer.videoTextures[0].VkTexture.sampler = Renderer.m_ctx.defaultSampler;
     projectm_wrapper.Init(&Renderer.m_ctx,&Renderer.videoTextures[0],video_config["core_w"].asInt(),video_config["core_h"].asInt());
@@ -196,6 +203,7 @@ int main(int argc, char* argv[]) {
     CWebSocket::milkPlaylistDB = &milkplaylistdb;
     CWebSocket::AV_ENCODER = &AV_Encoder;
     CWebSocket::m_projectm_wrapper = &projectm_wrapper;
+    CWebSocket::m_cunimixer = &unimixer;
 
     CWebSocket::initBroadcaster();
     CWebSocket::initCallbacks();
@@ -295,6 +303,36 @@ void Handle_Events() {
     }
 
     glfwPollEvents();
+
+    if (unimixer.p_audioplayerLoad.shouldLoad.load() == true) {
+        unimixer.AddAudioPlayer(unimixer.p_audioplayerLoad.mixerid);
+        unimixer.p_audioplayerLoad.shouldLoad.store(false);
+    }
+
+
+    if (unimixer.p_videoPlayerLoad.shouldLoad.load()) {
+        unimixer.p_videoPlayerLoad.shouldLoad.store(false);
+        unimixer.AddVideoFilePlayer(unimixer.p_videoPlayerLoad.audio_mixerid);
+        //AddVideoFilePlayerToMixer(m_pendingInputLoad.url,m_pendingInputLoad.mixerid);
+
+    }
+    if (unimixer.p_videoPlayerFileLoad.shouldLoad.load()) {
+        unimixer.p_videoPlayerFileLoad.shouldLoad.store(false);
+        int videoslot = unimixer.p_videoPlayerFileLoad.video_mixerid;
+        if (videoslot == -1) {
+            videoslot = Audio.AUDIO_MIXER.getMixerInputItem(unimixer.p_videoPlayerFileLoad.audio_mixerid)->videomixer_idx;
+        }
+
+        if (Renderer.videoMixerTextures[videoslot].AV_DECODER) {
+            Renderer.videoMixerTextures[videoslot].AV_DECODER->LoadFileAsync(unimixer.p_videoPlayerFileLoad.path);
+        }
+
+    }
+
+    if (unimixer.p_videoMixerUnLoad.shouldUnLoad.load() == true) {
+        unimixer.p_videoMixerUnLoad.shouldUnLoad.store(false);
+        unimixer.RemoveVideoFilePlayer(unimixer.p_videoMixerUnLoad.audio_mixerid);
+    }
 
     if (Audio.AUDIO_MIXER.NDIOutLoad.shouldLoad.load()) {
         Audio.AUDIO_MIXER.NDIOutLoad.shouldLoad.store(false);

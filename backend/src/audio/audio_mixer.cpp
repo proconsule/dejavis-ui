@@ -64,6 +64,14 @@ void CAUDIO_MIXER::AddGenericToMixer(int _mixerd) {
     CheckSolo(0);
 }
 
+int CAUDIO_MIXER::GetFirstFreeSlot() {
+    for (int i=0;i<m_inputs.size();i++) {
+        if (!m_inputs[i]->isActive)return i;
+    }
+    return -1;
+}
+
+
 void CAUDIO_MIXER::AddNDIToMixer(int _mixerd) {
     if (_mixerd >= m_inputs.size()) return;
     std::lock_guard<std::mutex> lock(m_mixer_mutex);
@@ -139,12 +147,14 @@ void CAUDIO_MIXER::CheckSolo(int _mixerout_idx) {
     }
 }
 
+/*
 void CAUDIO_MIXER::SetInputVolume(int _idx,float _val) {
     if (_idx == -1) return;
     if (_val < 0.0f || _val >1.0f)return;
     std::lock_guard<std::mutex> lock(m_mixer_mutex);
     m_inputs[_idx]->volume = _val;
 }
+*/
 
 void CAUDIO_MIXER::SetInputPan(int _idx,float _val) {
     if (_idx == -1) return;
@@ -625,10 +635,12 @@ void CAUDIO_MIXER::Stop() {
     DEJAVISUI_LOG_DEBUG("CAUDIO_MIXER::Stop() completato\n");
 }
 
+/*
 void CAUDIO_MIXER::setGainFactor(int _mixerid,GainPreset _gainpreset) {
     std::lock_guard<std::mutex> lock(m_mixer_mutex);
     m_inputs[_mixerid]->gainPreset = _gainpreset;
 }
+*/
 
 Json::Value CAUDIO_MIXER::GetStatus() {
     std::lock_guard<std::mutex> lock(m_mixer_mutex);

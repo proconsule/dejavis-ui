@@ -20,6 +20,7 @@
 #include "projectM-4/projectM.h"
 #include <tracy/Tracy.hpp>
 
+
 struct AudioDevice {
     int id;                   
     std::string name;
@@ -104,6 +105,7 @@ class CAudio
 	CNDISender * av_ndi_sender = nullptr;
 
 	PendingAudioOutDevLoad m_penedingAudioDevLoad;
+
 
 private:
 	PaError lastError;

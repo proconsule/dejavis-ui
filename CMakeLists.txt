@@ -303,8 +303,8 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/video/postprocess.cpp
         backend/src/video/vulkan_utils.cpp
         backend/src/video/projectm_wrapper.cpp
-        backend/src/audio/limiter/LimiterBank.cpp
-        backend/src/audio/limiter/FFmpegLimiter.cpp
+        #backend/src/audio/limiter/LimiterBank.cpp
+        #backend/src/audio/limiter/FFmpegLimiter.cpp
         backend/src/video/yuv2rgb/YUV2RGBPipeline.cpp
         backend/src/video/yuv2rgb/YUVConverter_Common.cpp
         backend/src/video/yuv2rgb/converters/UYVYConverter.cpp
@@ -312,6 +312,12 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/video/yuv2rgb/converters/NV12Converter.cpp
         backend/src/video/yuv2rgb/converters/P010Converter.cpp
         backend/src/unimixer.cpp
+        backend/src/audio/audioeffects/audioeffects.cpp
+        backend/src/audio/audioeffects/EffectBank.cpp
+        backend/src/audio/audioeffects/FFmpegLimiter.cpp
+        backend/src/audio/audioeffects/FFmpegEcho.cpp
+        backend/src/audio/audioeffects/FFmpegAtempo.cpp
+
 )
 
 

@@ -194,6 +194,37 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 
 		}
 
+		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_EFFECTADD){
+			int _inputidx = json["idx"].asInt();
+			int _type = json["fxtype"].asInt();
+			m_cunimixer->AddInputAudioFX(_inputidx,(audio_utils::EffectBank::EffectType)_type);
+
+		}
+
+		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_EFFECTDEL){
+			int _inputidx = json["idx"].asInt();
+			int _fxpos = json["slot"].asInt();
+			m_cunimixer->RemoveInputAudioFX(_inputidx,_fxpos);
+
+
+		}
+
+		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_INPUT_EFFECTSET){
+			int _inputidx = json["idx"].asInt();
+			int _fxpos = json["slot"].asInt();
+			int type = json["type"].asInt();
+			if (type == (int)audio_utils::EffectBank::EffectType::Echo) {
+				Json::Value params = json["params"];
+				audio_utils::EffectBank::SlotConfig mycfg;
+				mycfg.type = audio_utils::EffectBank::EffectType::Echo;
+				mycfg.echo.delayMs = params["delayMs"].asInt();
+				mycfg.echo.decay = params["decay"].asFloat();
+				mycfg.echo.outAmplitude = params["outAmplitude"].asFloat();
+
+				m_cunimixer->ReconfigureInputFX(_inputidx,_fxpos,mycfg);
+			}
+		}
+
 		if(getMsgId(json) == DEJAVISUI_MSGID::MIXER_OUTPUT_VOLUME){
 			int outputidx = json["outputidx"].asInt();
 			float _val = json["value"].asFloat();

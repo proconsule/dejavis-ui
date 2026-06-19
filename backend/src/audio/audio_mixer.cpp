@@ -253,17 +253,18 @@ void CAUDIO_MIXER::ProcessMasterOutput(float **_planar_in,int _channel_size) {
     }
 
 
-    limiterBank.ProcessPlanar(
+    output_effectBank.ProcessPlanar(
         m_outputs[0]->limiterSlot,
         _planar_in[0],
         _planar_in[1],
         _channel_size
     );
 
-    m_outputs[0]->levelL = limiterBank.GetPostLevelL (m_outputs[0]->limiterSlot);
-    m_outputs[0]->levelR = limiterBank.GetPostLevelR (m_outputs[0]->limiterSlot);
-    m_outputs[0]->prelimiterL = limiterBank.GetPreLevelL (m_outputs[0]->limiterSlot);
-    m_outputs[0]->prelimiterR = limiterBank.GetPreLevelR (m_outputs[0]->limiterSlot);
+    int slot = m_outputs[0]->limiterSlot;
+    m_outputs[0]->levelL = output_effectBank.GetPostLevelL(slot);
+    m_outputs[0]->levelR = output_effectBank.GetPostLevelR(slot);
+    m_outputs[0]->prelimiterL = output_effectBank.GetPreLevelL(slot);
+    m_outputs[0]->prelimiterR = output_effectBank.GetPreLevelR(slot);
 
 
     auto& outResampler = getMixerOutputItem(0)->Resampler;
@@ -295,16 +296,16 @@ void CAUDIO_MIXER::ProcessAuxOutput(float * samples,int size) {
         volR *= (1.0f + out->pan);
     }
 
-    limiterBank.Process(
+    output_effectBank.Process(
         m_outputs[1]->limiterSlot,
         samples,
         size / 2,
         1.0f
     );
-    m_outputs[1]->levelL = limiterBank.GetPostLevelL (m_outputs[1]->limiterSlot);
-    m_outputs[1]->levelR = limiterBank.GetPostLevelR (m_outputs[1]->limiterSlot);
-    m_outputs[1]->prelimiterL = limiterBank.GetPreLevelL (m_outputs[1]->limiterSlot);
-    m_outputs[1]->prelimiterR = limiterBank.GetPreLevelR (m_outputs[1]->limiterSlot);
+    m_outputs[1]->levelL = output_effectBank.GetPostLevelL (m_outputs[1]->limiterSlot);
+    m_outputs[1]->levelR = output_effectBank.GetPostLevelR (m_outputs[1]->limiterSlot);
+    m_outputs[1]->prelimiterL = output_effectBank.GetPreLevelL (m_outputs[1]->limiterSlot);
+    m_outputs[1]->prelimiterR = output_effectBank.GetPreLevelR (m_outputs[1]->limiterSlot);
 
     out->buffer->write(samples, size);
 }
@@ -328,8 +329,13 @@ void CAUDIO_MIXER::ProcessMasterMix(size_t frames) {
     for (auto& input : m_inputs) {
         if (!input->isActive) continue;
         if (input->mixerout_idx != MIXER_OUTPUTS::OUTPUT_MASTER) continue;
+
         if (input->buffer_planar->getAvailableRead() < frames) continue;
         if (!input->buffer_planar->read(tempIn, frames)) continue;
+
+        if (input->limiterSlot >= 0) {
+            input_effectBank.ProcessPlanar(input->limiterSlot, tempIn[0], tempIn[1], frames);
+        }
 
         const float gain = getGainFactor(input->gainPreset);
         float volL = input->volume * gain;
@@ -559,9 +565,10 @@ void CAUDIO_MIXER::Mixer_NDI_Output(int _mixeroutid,bool _status) {
         std::string output_name_str = "Dejavis Audio Mixer - ";
         output_name_str = output_name_str + m_outputs[_mixeroutid]->name;
         m_outputs[_mixeroutid].get()->ndi_audio_out.Init_AudioOnly(output_name_str);
-
+        DEJAVISUI_LOG_DEBUG("STARTING NDI OUTPUT");
     }else {
         m_outputs[_mixeroutid].get()->ndi_audio_out.Stop_Audio();
+        DEJAVISUI_LOG_DEBUG("STOPPING NDI OUTPUT");
     }
 }
 
@@ -668,7 +675,7 @@ Json::Value CAUDIO_MIXER::GetStatus() {
         item["buffer_used"] = (int)input->buffer_planar->getAvailableRead()*input->buffer_planar->getChannels();
 
         item["videomixer_idx"] = input->videomixer_idx;
-
+        item["audio_dsp"] = input_effectBank.GetSlotConfigJson(input->limiterSlot);
 
 
         if (input->fileplayer != nullptr) {

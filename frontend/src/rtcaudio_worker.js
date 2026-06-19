@@ -94,8 +94,9 @@ class RTCAudioProcessor extends AudioWorkletProcessor {
             }
             const avg = sum / (bin.high - bin.low);
             const dB = avg > 0 ? 20 * Math.log10(avg) : -100;
-            const normalized = Math.max(0, (dB + 90) / 70);
-            const raw = Math.min(Math.pow(normalized * (0.7 + i * 0.15), 0.85), 1.0);
+            const normalized = Math.max(0, (dB + 100) / 100);
+            const freqBoost = 1.0 + (i * 0.02); // Boost leggerissimo per le alte
+            const raw = Math.min(Math.pow(normalized * freqBoost, 0.9), 1.0);
 
             this.fftSmoothed[i] = raw > this.fftSmoothed[i]
                 ? raw * 0.4 + this.fftSmoothed[i] * 0.6

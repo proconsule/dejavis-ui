@@ -147,10 +147,10 @@ class PCMProcessor extends AudioWorkletProcessor {
             const avg = sum / (high - low);
 
             const dB         = avg > 0 ? 20 * Math.log10(avg) : -100;
-            const minDb      = -90, maxDb = -20;
+            const minDb      = -100, maxDb = 0;
             const normalized = Math.max(0, (dB - minDb) / (maxDb - minDb));
-            const sensitivity = 0.7 + i * 0.15;
-            const raw        = Math.min(Math.pow(normalized * sensitivity, 0.85), 1.0);
+            const sensitivity = 1.0 + i * 0.02;
+            const raw        = Math.min(Math.pow(normalized * sensitivity, 0.9), 1.0);
 
             const prev     = this.fftSmoothed[i];
             const smoothed = raw > prev

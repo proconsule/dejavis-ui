@@ -21,7 +21,7 @@
 
 #include "../ndi_receiver.h"
 #include "backend/src/ndi_sender.h"
-#include "limiter/LimiterBank.h"
+#include "audioeffects/EffectBank.h"
 
 #include <tracy/Tracy.hpp>
 
@@ -152,7 +152,8 @@ public:
         trash_buffer_out = std::make_unique<RingBuffer>(16384);
 
 
-        audio_utils::LimiterBank::SlotConfig cfg;
+        audio_utils::EffectBank::SlotConfig cfg;
+        cfg.type = audio_utils::EffectBank::EffectType::Limiter;
         cfg.limiter.sampleRate = 48000;
         cfg.limiter.limit      = 0.95f;
         cfg.limiter.attackMs   = 1.0f;
@@ -161,8 +162,8 @@ public:
         cfg.limiter.asc        = true;
         cfg.meterDecaySec      = 0.1f;
 
-        m_outputs[0]->limiterSlot = limiterBank.Alloc(cfg);
-        m_outputs[1]->limiterSlot = limiterBank.Alloc(cfg);
+        m_outputs[0]->limiterSlot = output_effectBank.AddEffectToSlot(0,cfg);
+        m_outputs[1]->limiterSlot = output_effectBank.AddEffectToSlot(1,cfg);
 
         constexpr size_t MAX_FRAMES = 4096;
 
@@ -182,12 +183,15 @@ public:
         m_auxRead[0].resize(MAX_FRAMES);
         m_auxRead[1].resize(MAX_FRAMES);
 
+
         for (int i=0;i<16;i++) {
             std::string _name = "CH " + std::to_string(i);
             AddToMixer(_name,true,48000);
         }
+
+
         for (int i=0;i<16;i++) {
-            m_inputs[i]->limiterSlot = limiterBank.Alloc(cfg);
+            m_inputs[i]->limiterSlot = i;
         }
 
 
@@ -292,7 +296,9 @@ public:
     std::unique_ptr<RingBuffer> trash_buffer;
     std::unique_ptr<RingBuffer> trash_buffer_out;
 
-    audio_utils::LimiterBank limiterBank{18};
+    audio_utils::EffectBank input_effectBank{16};
+    audio_utils::EffectBank output_effectBank{2};
+
 
     PendingNDILoad NDIOutLoad;
 

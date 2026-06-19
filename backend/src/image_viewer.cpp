@@ -494,6 +494,17 @@ bool cimage_viewer::LoadFile(const std::string &_path) {
 
             if (avcodec_open2(m_video_ctx, v_codec, nullptr) >= 0) {
                 m_frame_sw = av_frame_alloc();
+                AVPacket pkt;
+                if (av_read_frame(m_fmt_ctx, &pkt) >= 0) {
+                    if (avcodec_send_packet(m_video_ctx, &pkt) >= 0) {
+                        if (avcodec_receive_frame(m_video_ctx, m_frame_sw) >= 0) {
+                            // Aggiorna il contesto con le dimensioni del frame reale
+                            m_video_ctx->width = m_frame_sw->width;
+                            m_video_ctx->height = m_frame_sw->height;
+                        }
+                    }
+                    av_packet_unref(&pkt);
+                }
 
             }
         }
@@ -511,8 +522,8 @@ bool cimage_viewer::LoadFile(const std::string &_path) {
     if (!m_video_ctx) return false;
 
 
-    int w = m_video_ctx->width;
-    int h = m_video_ctx->height;
+    //int w = m_video_ctx->width;
+    //int h = m_video_ctx->height;
 
     //ExtractMetadataFromContexts();
 

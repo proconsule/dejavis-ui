@@ -121,6 +121,7 @@ public:
         FileBrowser.addExtension(".avi");
         FileBrowser.addExtension(".mov");
         FileBrowser.addExtension(".mkv");
+        FileBrowser.addExtension(".webm");
 
         FileBrowser.setRootPath(_path);
     }

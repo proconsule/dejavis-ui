@@ -136,7 +136,7 @@ export const MixerOutput = memo(function MixerOutput({ idx,output, onUpdateParam
                 </div>
                 <div className="flex justify-center w-full pb-2">
                     <button
-                        onClick={() => onUpdateParam(3022, idx, NDI_out ? 1 :0 )}
+                        onClick={() => onUpdateParam(3022, idx, NDI_out ? 0 :1 )}
                         className="flex items-center justify-center gap-2 px-3 py-1 rounded-sm border border-white/10 bg-zinc-800 text-zinc-400 text-[10px] font-black transition-all active:scale-95 hover:bg-zinc-700 hover:text-zinc-200"
                     >
                         {/* Il "LED" che si illumina */}

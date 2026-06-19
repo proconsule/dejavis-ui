@@ -8,7 +8,7 @@
 
 #include "video/renderer.h"
 #include "audio/audio.h"
-
+#include "audio/audioeffects/EffectBank.h"
 
 struct PendingAudioPlayerLoad {
     std::atomic<bool> shouldLoad{false};
@@ -110,6 +110,11 @@ public:
 
     void SetInputMixerID(int _idx, int _mixerid);
 
+
+    void AddInputAudioFX(int _idx, audio_utils::EffectBank::EffectType _effecttype);
+    void RemoveInputAudioFX(int _idx,int _fxpos);
+
+    void ReconfigureInputFX(int _idx,int _fxpos,audio_utils::EffectBank::SlotConfig mycfg);
 
     Json::Value getMixerStatus();
 

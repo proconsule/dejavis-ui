@@ -347,3 +347,44 @@ void cunimixer::SetInputMixerID(int _idx, int _mixerid) {
     if (myinput == nullptr) return;
     myinput->mixerout_idx = _mixerid;
 }
+
+void cunimixer::AddInputAudioFX(int _idx, audio_utils::EffectBank::EffectType _effecttype) {
+    if (_effecttype == audio_utils::EffectBank::EffectType::Limiter) {
+        audio_utils::EffectBank::SlotConfig cfg;
+        cfg.type = audio_utils::EffectBank::EffectType::Limiter;
+        cfg.limiter.sampleRate = 48000;
+        cfg.limiter.limit      = 0.95f;
+        cfg.limiter.attackMs   = 1.0f;
+        cfg.limiter.releaseMs  = 50.0f;
+        cfg.limiter.autoLevel  = false;
+        cfg.limiter.asc        = true;
+        cfg.meterDecaySec      = 0.1f;
+        audio_ref->AUDIO_MIXER.input_effectBank.AddEffectToSlot(_idx, cfg);
+    }
+    if (_effecttype == audio_utils::EffectBank::EffectType::Echo) {
+        audio_utils::EffectBank::SlotConfig cfg;
+        cfg.type = audio_utils::EffectBank::EffectType::Echo;
+        cfg.echo.sampleRate = 48000;
+        cfg.echo.delayMs    = 45.0f;
+        cfg.echo.decay       = 0.5f;
+        cfg.echo.outAmplitude = 0.8f;
+        audio_ref->AUDIO_MIXER.input_effectBank.AddEffectToSlot(_idx, cfg);
+
+    }
+    if (_effecttype == audio_utils::EffectBank::EffectType::Atempo) {
+        audio_utils::EffectBank::SlotConfig cfg;
+        cfg.type = audio_utils::EffectBank::EffectType::Atempo;
+        cfg.atempo.sampleRate = 48000;
+        cfg.atempo.tempo = 0.5f;
+        audio_ref->AUDIO_MIXER.input_effectBank.AddEffectToSlot(_idx, cfg);
+
+    }
+}
+
+void cunimixer::RemoveInputAudioFX(int _idx, int _fxpos) {
+    audio_ref->AUDIO_MIXER.input_effectBank.RemoveEffectFromSlot(_idx, _fxpos);
+}
+
+void cunimixer::ReconfigureInputFX(int _idx, int _fxpos, audio_utils::EffectBank::SlotConfig mycfg) {
+    audio_ref->AUDIO_MIXER.input_effectBank.ReconfigureEffect(_idx,_fxpos,mycfg);
+}

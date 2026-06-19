@@ -10,6 +10,7 @@ import MixerPreviewBackground from "@/components/video/videomixerpreview_borderl
 import {useGlobalWebRTC} from "@/components/rtc/WebRTCProvider.tsx";
 import {useWorkletAnalysis} from "@/hooks/workletaudioanalysis.ts";
 import {FFTCanvas} from "@/components/audio/FFTCanvas.tsx";
+import {FxBank} from "@/components/audio/effects/fxbank.tsx";
 
 
 interface MixerData {
@@ -39,6 +40,7 @@ export function AudioMixerDashboard() {
         if (!lastJsonMessage) return;
         if (lastJsonMessage.msgid == 1) {
             setMixer(lastJsonMessage?.audio?.mixer);
+            console.log(lastJsonMessage);
         }
     }, [lastJsonMessage]);
 
@@ -137,15 +139,20 @@ export function AudioMixerDashboard() {
 
             {/* Sezione Inferiore: Input Fader */}
             <div className="flex gap-0 overflow-x-auto pb-8 pt-2
-            scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent
-            hover:scrollbar-thumb-primary/50 transition-all duration-300">
+scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent
+hover:scrollbar-thumb-primary/50 transition-all duration-300">
                 {mixer.inputs?.map((input: MixerInputType, idx: number) => (
-                    <MixerInput
-                        key={`input-ch-${idx}`}
-                        idx={idx}
-                        input={input}
-                        onUpdateParam={handleInputUpdate}
-                    />
+                    <div key={`input-ch-container-${idx}`} className="flex flex-col">
+                        <MixerInput
+                            idx={idx}
+                            input={input}
+                            onUpdateParam={handleInputUpdate}
+                        />
+                        <FxBank
+                            channelIdx={idx}
+                            // Passa qui eventuali callback per gestire i comandi FX
+                        />
+                    </div>
                 ))}
             </div>
         </div>

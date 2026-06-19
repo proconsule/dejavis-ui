@@ -220,7 +220,6 @@ export const MixerInput = memo(function MixerInput({ input, idx, onUpdateParam }
         { value: 3, label: "+20"  },
     ] as const;
 
-    console.log(input);
 
     return (
         <div className={`flex flex-col w-28 shrink-0 bg-zinc-900/90 border-x border-b border-white/5 border-t-4 ${getRoutingColor()} transition-all`}>

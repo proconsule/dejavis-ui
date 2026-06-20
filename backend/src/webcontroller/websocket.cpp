@@ -571,6 +571,34 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			}
 		}
 
+		if (getMsgId(json) == DEJAVISUI_MSGID::INPUT_BROWSE_CURRENT) {
+
+			int _mixerid = json["idx"].asInt();
+			int _type = json["type"].asInt();
+
+			if (_type == 0) {
+				caudioplayer * player = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->fileplayer;
+
+				if (player) {
+					Json::Value fb_json = player->FileBrowser.browsecurrent();
+					fb_json["msgid"] = static_cast<int>(DEJAVISUI_MSGID::INPUT_BROWSE);
+					fb_json["idx"] = _mixerid;
+					wsConnPtr->sendJson(fb_json);
+				}
+			}
+			if (_type == 3) {
+				int videomixerid = m_cunimixer->audio_ref->AUDIO_MIXER.getMixerInputItem(_mixerid)->videomixer_idx;
+				CAV_DECODER *avdecoder =  Renderer->videoMixerTextures[videomixerid].AV_DECODER;
+
+				if (avdecoder) {
+					Json::Value fb_json = avdecoder->FileBrowser.browsecurrent();
+					fb_json["msgid"] = static_cast<int>(DEJAVISUI_MSGID::INPUT_BROWSE);
+					fb_json["idx"] = _mixerid;
+					wsConnPtr->sendJson(fb_json);
+				}
+			}
+		}
+
 		if (getMsgId(json) == DEJAVISUI_MSGID::INPUT_LOAD_FILE) {
 			printf("%s \r\n",json.toStyledString().c_str());
 			int _mixerid = json["idx"].asInt();

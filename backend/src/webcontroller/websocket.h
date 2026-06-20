@@ -81,6 +81,7 @@ enum class DEJAVISUI_MSGID {
         INPUT_UNLOAD = 5002,
         INPUT_BROWSE = 5003,
         INPUT_LOAD_FILE = 5004,
+		INPUT_BROWSE_CURRENT = 5005,
         INPUT_SEEK = 5008,
 
         // Audio Device Extensions

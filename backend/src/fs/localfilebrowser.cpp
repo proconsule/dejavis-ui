@@ -130,8 +130,14 @@ Json::Value CLocalFileBrowser::browse(const std::string& relativeRequest) {
         rootJson["message"] = e.what();
     }
 
+    lastrelPath = relativeRequest;
     return rootJson;
 }
+
+Json::Value CLocalFileBrowser::browsecurrent() {
+    return browse(lastrelPath);
+}
+
 
 std::string CLocalFileBrowser::formatSize(uintmax_t size) const {
     double s = static_cast<double>(size);

@@ -19,6 +19,8 @@ public:
     
     Json::Value browse(const std::string& relativeRequest);
 
+    Json::Value browsecurrent();
+
     void clearExtensions();
     void addExtension(const std::string& ext);
     Json::Value getAllDirectories(const fs::path& rootPath);
@@ -32,6 +34,9 @@ private:
 
     bool isSupported(const fs::path& p) const;
     std::string formatSize(uintmax_t size) const;
+
+    std::string lastrelPath = "";
+
 };
 
 #endif

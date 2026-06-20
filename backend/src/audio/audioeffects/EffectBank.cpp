@@ -37,34 +37,41 @@ namespace audio_utils {
 
         Slot& s = *slots_[slotId];
         s.lastCfg = cfg;
-        std::unique_ptr<AudioEffect> effect;
+        std::shared_ptr<AudioEffect> effect;
 
         if (cfg.type == EffectType::Limiter) {
-            auto lim = std::make_unique<FFmpegLimiter>();
+            auto lim = std::make_shared<FFmpegLimiter>();
             if (!lim->Init(cfg.limiter)) {
                 DEJAVISUI_LOG_ERROR("ERROR: FFmpegLimiter Init failed for slot %d", slotId);
                 return -1;
             }
-            effect = std::move(lim);
+            effect = lim;
         } else if (cfg.type == EffectType::Echo) {
-            auto echo = std::make_unique<FFmpegEcho>();
+            auto echo = std::make_shared<FFmpegEcho>();
             if (!echo->Init(cfg.echo)) {
                 DEJAVISUI_LOG_ERROR("ERROR: FFmpegEcho Init failed for slot %d", slotId);
                 return -1;
             }
-            effect = std::move(echo);
+            effect = echo;
         } else if (cfg.type == EffectType::Atempo) {
-            auto tempo = std::make_unique<FFmpegAtempo>();
+            auto tempo = std::make_shared<FFmpegAtempo>();
             if (!tempo->Init(cfg.atempo)) {
                 DEJAVISUI_LOG_ERROR("ERROR: FFmpegAtempo Init failed for slot %d", slotId);
                 return -1;
             }
-            effect = std::move(tempo);
+            effect = tempo;
         } else {
             return -1;
         }
 
-        s.effects.push_back(std::move(effect));
+        auto oldChain = s.chain.load(std::memory_order_relaxed);
+        auto newChain = std::make_shared<EffectChain>();
+        if (oldChain) {
+            newChain->effects = oldChain->effects;
+        }
+        newChain->effects.push_back(effect);
+
+        s.chain.store(newChain, std::memory_order_release);
         applyDecayConstant(s, cfg);
         s.active = true;
         return slotId;
@@ -73,10 +80,16 @@ namespace audio_utils {
     void EffectBank::RemoveEffectFromSlot(int slotId, size_t effectIndex) {
         if (!validSlot(slotId)) return;
         Slot& s = *slots_[slotId];
-        if (effectIndex < s.effects.size()) {
-            s.effects.erase(s.effects.begin() + effectIndex);
-        }
-        if (s.effects.empty()) s.active = false;
+
+        auto oldChain = s.chain.load(std::memory_order_relaxed);
+        if (!oldChain || effectIndex >= oldChain->effects.size()) return;
+
+        auto newChain = std::make_shared<EffectChain>();
+        newChain->effects = oldChain->effects;
+        newChain->effects.erase(newChain->effects.begin() + effectIndex);
+
+        s.chain.store(newChain, std::memory_order_release);
+        if (newChain->effects.empty()) s.active = false;
     }
 
     void EffectBank::updateMeters(Slot& s, size_t numFrames,
@@ -114,7 +127,7 @@ namespace audio_utils {
         Slot& s = *slots_[slotId];
         s.active = false;
         s.lastCfg = SlotConfig{};
-        s.effects.clear();
+        s.chain.store(nullptr, std::memory_order_release);
         s.preLevelL .store(0.0f, std::memory_order_relaxed);
         s.preLevelR .store(0.0f, std::memory_order_relaxed);
         s.postLevelL.store(0.0f, std::memory_order_relaxed);
@@ -124,16 +137,35 @@ namespace audio_utils {
     bool EffectBank::ReconfigureEffect(int slotId, size_t effectIndex, const SlotConfig& cfg) {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
-        if (effectIndex >= s.effects.size()) return false;
 
-        const void* configPtr = nullptr;
-        if (cfg.type == EffectType::Limiter) configPtr = &cfg.limiter;
-        else if (cfg.type == EffectType::Echo) configPtr = &cfg.echo;
-        else if (cfg.type == EffectType::Atempo) configPtr = &cfg.atempo;
+        auto oldChain = s.chain.load(std::memory_order_acquire);
+        if (!oldChain || effectIndex >= oldChain->effects.size()) return false;
 
-        if (!configPtr || !s.effects[effectIndex]->Reconfigure(configPtr)) {
+        // Creiamo una nuova catena per non modificare quella in uso dal thread audio
+        auto newChain = std::make_shared<EffectChain>();
+        newChain->effects = oldChain->effects; // Copia i shared_ptr (non gli oggetti)
+
+        // Creiamo il nuovo effetto riconfigurato
+        std::shared_ptr<AudioEffect> newEffect;
+        if (cfg.type == EffectType::Limiter) {
+            auto lim = std::make_shared<FFmpegLimiter>();
+            if (!lim->Init(cfg.limiter)) return false;
+            newEffect = lim;
+        } else if (cfg.type == EffectType::Echo) {
+            auto echo = std::make_shared<FFmpegEcho>();
+            if (!echo->Init(cfg.echo)) return false;
+            newEffect = echo;
+        } else if (cfg.type == EffectType::Atempo) {
+            auto tempo = std::make_shared<FFmpegAtempo>();
+            if (!tempo->Init(cfg.atempo)) return false;
+            newEffect = tempo;
+        } else {
             return false;
         }
+
+        newChain->effects[effectIndex] = newEffect;
+        s.chain.store(newChain, std::memory_order_release);
+
         s.lastCfg = cfg;
         applyDecayConstant(s, cfg);
         return true;
@@ -143,8 +175,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        for (size_t i = 0; i < s.effects.size(); ++i) {
-            if (dynamic_cast<FFmpegLimiter*>(s.effects[i].get())) {
+        auto chain = s.chain.load(std::memory_order_acquire);
+        if (!chain) return false;
+
+        for (size_t i = 0; i < chain->effects.size(); ++i) {
+            if (dynamic_cast<FFmpegLimiter*>(chain->effects[i].get())) {
                 SlotConfig wrap;
                 wrap.type = EffectType::Limiter;
                 wrap.limiter = cfg;
@@ -159,8 +194,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        for (size_t i = 0; i < s.effects.size(); ++i) {
-            if (dynamic_cast<FFmpegEcho*>(s.effects[i].get())) {
+        auto chain = s.chain.load(std::memory_order_acquire);
+        if (!chain) return false;
+
+        for (size_t i = 0; i < chain->effects.size(); ++i) {
+            if (dynamic_cast<FFmpegEcho*>(chain->effects[i].get())) {
                 SlotConfig wrap;
                 wrap.type = EffectType::Echo;
                 wrap.echo = cfg;
@@ -175,8 +213,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        for (size_t i = 0; i < s.effects.size(); ++i) {
-            if (dynamic_cast<FFmpegAtempo*>(s.effects[i].get())) {
+        auto chain = s.chain.load(std::memory_order_acquire);
+        if (!chain) return false;
+
+        for (size_t i = 0; i < chain->effects.size(); ++i) {
+            if (dynamic_cast<FFmpegAtempo*>(chain->effects[i].get())) {
                 SlotConfig wrap;
                 wrap.type = EffectType::Atempo;
                 wrap.atempo = cfg;
@@ -194,8 +235,10 @@ namespace audio_utils {
 
     int EffectBank::GetLatencyFrames(int slotId) const {
         if (!validSlot(slotId)) return 0;
+        auto chain = slots_[slotId]->chain.load(std::memory_order_acquire);
+        if (!chain) return 0;
         int totalLatency = 0;
-        for (const auto& eff : slots_[slotId]->effects) {
+        for (const auto& eff : chain->effects) {
             totalLatency += eff->GetLatencyFrames();
         }
         return totalLatency;
@@ -205,12 +248,13 @@ namespace audio_utils {
         if (!validSlot(slotId) || inOut == nullptr || numFrames == 0) return;
         Slot& slot = *slots_[slotId];
 
-        // 1. Applica Pre-Gain PRIMA di tutto
+        auto chain = slot.chain.load(std::memory_order_acquire);
+        if (!chain) return;
+
         if (pre_gain != 1.0f) {
             for (size_t i = 0; i < numFrames * 2; ++i) inOut[i] *= pre_gain;
         }
 
-        // 2. Calcolo Pre-Peak (livello post-gain, pre-effetti)
         float prePeakL = 0.0f, prePeakR = 0.0f;
         for (size_t i = 0; i < numFrames; ++i) {
             float aL = std::fabs(inOut[i * 2]);
@@ -219,12 +263,10 @@ namespace audio_utils {
             if (aR > prePeakR) prePeakR = aR;
         }
 
-        // 3. Processamento sequenziale della catena
-        for (auto& effect : slot.effects) {
+        for (auto& effect : chain->effects) {
             effect->ProcessBlockStereo(inOut, numFrames, 1.0f);
         }
 
-        // 4. Calcolo Post-Peak (livello finale dopo tutta la catena)
         float postPeakL = 0.0f, postPeakR = 0.0f;
         for (size_t i = 0; i < numFrames; ++i) {
             float aL = std::fabs(inOut[i * 2]);
@@ -240,6 +282,9 @@ namespace audio_utils {
                                         size_t numFrames, float pre_gain) {
         if (!validSlot(slotId) || left == nullptr || right == nullptr || numFrames == 0) return;
         Slot& slot = *slots_[slotId];
+
+        auto chain = slot.chain.load(std::memory_order_acquire);
+        if (!chain) return;
 
         if (pre_gain != 1.0f) {
             for (size_t i = 0; i < numFrames; ++i) {
@@ -257,7 +302,7 @@ namespace audio_utils {
         }
 
         // 3. Processamento Catena
-        for (auto& effect : slot.effects) {
+        for (auto& effect : chain->effects) {
             effect->ProcessBlockStereoPlanar(left, right, numFrames, 1.0f);
         }
 
@@ -315,27 +360,29 @@ namespace audio_utils {
         root["active"] = s.active;
         root["meterDecaySec"] = s.lastCfg.meterDecaySec;
 
-        // Since a slot can have multiple effects in a chain, we represent them as an array
+        auto chain = s.chain.load(std::memory_order_acquire);
         Json::Value effectsArray(Json::arrayValue);
-        for (const auto& eff : s.effects) {
-            Json::Value effJson;
-            if (auto* lim = dynamic_cast<FFmpegLimiter*>(eff.get())) {
-                effJson["type"] = (int)EffectType::Limiter;
-                effJson["limit"] = s.lastCfg.limiter.limit;
-                effJson["attackMs"] = s.lastCfg.limiter.attackMs;
-                effJson["releaseMs"] = s.lastCfg.limiter.releaseMs;
-                effJson["autoLevel"] = s.lastCfg.limiter.autoLevel;
-                effJson["asc"] = s.lastCfg.limiter.asc;
-            } else if (auto* echo = dynamic_cast<FFmpegEcho*>(eff.get())) {
-                effJson["type"] = (int)EffectType::Echo;
-                effJson["delayMs"] = s.lastCfg.echo.delayMs;
-                effJson["decay"] = s.lastCfg.echo.decay;
-                effJson["outAmplitude"] = s.lastCfg.echo.outAmplitude;
-            } else if (auto* tempo = dynamic_cast<FFmpegAtempo*>(eff.get())) {
-                effJson["type"] = (int)EffectType::Atempo;
-                effJson["tempo"] = s.lastCfg.atempo.tempo;
+        if (chain) {
+            for (const auto& eff : chain->effects) {
+                Json::Value effJson;
+                if (auto* lim = dynamic_cast<FFmpegLimiter*>(eff.get())) {
+                    effJson["type"] = (int)EffectType::Limiter;
+                    effJson["limit"] = s.lastCfg.limiter.limit;
+                    effJson["attackMs"] = s.lastCfg.limiter.attackMs;
+                    effJson["releaseMs"] = s.lastCfg.limiter.releaseMs;
+                    effJson["autoLevel"] = s.lastCfg.limiter.autoLevel;
+                    effJson["asc"] = s.lastCfg.limiter.asc;
+                } else if (auto* echo = dynamic_cast<FFmpegEcho*>(eff.get())) {
+                    effJson["type"] = (int)EffectType::Echo;
+                    effJson["delayMs"] = s.lastCfg.echo.delayMs;
+                    effJson["decay"] = s.lastCfg.echo.decay;
+                    effJson["outAmplitude"] = s.lastCfg.echo.outAmplitude;
+                } else if (auto* tempo = dynamic_cast<FFmpegAtempo*>(eff.get())) {
+                    effJson["type"] = (int)EffectType::Atempo;
+                    effJson["tempo"] = s.lastCfg.atempo.tempo;
+                }
+                effectsArray.append(effJson);
             }
-            effectsArray.append(effJson);
         }
         root["effects"] = effectsArray;
         return root;

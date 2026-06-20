@@ -77,10 +77,13 @@ namespace audio_utils {
         size_t Capacity() const { return slots_.size(); }
 
     private:
+        struct EffectChain {
+            std::vector<std::shared_ptr<AudioEffect>> effects;
+        };
         struct Slot {
             bool                            active   = false;
             SlotConfig                      lastCfg;
-            std::vector<std::unique_ptr<AudioEffect>> effects;
+            std::atomic<std::shared_ptr<EffectChain>> chain{nullptr};
             std::atomic<float>              preLevelL{0.0f};
             std::atomic<float>              preLevelR{0.0f};
             std::atomic<float>              postLevelL{0.0f};

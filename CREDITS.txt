@@ -1,0 +1,108 @@
+===============================================================================
+dejavis-ui - Third-Party Software Credits & Licenses
+===============================================================================
+
+dejavis-ui is developed under the BSD 3-Clause License.
+This software relies on several exceptional open-source and proprietary
+libraries. Below is a comprehensive list of the components used.
+
+-------------------------------------------------------------------------------
+VISUALIZATION & RENDERING
+-------------------------------------------------------------------------------
+
+* projectM
+  License: GPL
+  Used for: High-quality, real-time audio visualization (VIS).
+  Website: https://projectm.io
+
+* Vulkan SDK
+  License: Apache 2.0 / MIT
+  Used for: Hardware-accelerated GPU rendering and compute.
+  Website: https://www.vulkan.io
+
+* Dear ImGui
+  License: MIT
+  Used for: Internal developer tools and debug interface.
+  Website: https://github.com/ocornut/imgui
+
+* GLFW
+  License: Zlib/Libpng
+  Used for: Window management and OpenGL/Vulkan context creation.
+  Website: https://www.glfw.org
+
+* Shaderc / SPIR-V Tools / glslang
+  License: Apache 2.0
+  Used for: Shader compilation and optimization.
+  Website: https://github.com/google/shaderc
+
+-------------------------------------------------------------------------------
+CORE MULTIMEDIA & AUDIO
+-------------------------------------------------------------------------------
+
+* FFmpeg (libavcodec, libavformat, libavfilter, libavutil, libswresample, libswscale)
+  License: LGPL v2.1+ / GPL
+  Used for: Audio/Video decoding, encoding, streaming and DSP.
+  Website: https://ffmpeg.org
+
+* PortAudio
+  License: MIT
+  Used for: Cross-platform audio I/O.
+  Website: http://www.portaudio.com
+
+-------------------------------------------------------------------------------
+NETWORK & CONNECTIVITY
+-------------------------------------------------------------------------------
+
+* NDI SDK (Network Device Interface)
+  License: Proprietary (NewTek/Vizrt)
+  Used for: High-performance network video and audio transport.
+  Website: https://ndi.video
+
+* libdatachannel
+  License: MIT
+  Used for: WebRTC implementation for remote monitoring and streaming.
+  Website: https://github.com/paullouisageneau/libdatachannel
+
+* Drogon Framework
+  License: Apache 2.0
+  Used for: High-performance HTTP and WebSocket server.
+  Website: https://drogon.org
+
+* Spout2 SDK
+  License: MIT
+  Used for: Zero-latency local video sharing on Windows.
+  Website: https://github.com/leadedge/Spout2
+
+-------------------------------------------------------------------------------
+UTILITIES & TOOLS
+-------------------------------------------------------------------------------
+
+* SQLiteCpp / SQLite
+  License: MIT / Public Domain
+  Used for: Database management for playlists and user settings.
+  Website: https://github.com/SRombauts/SQLiteCpp
+
+* Tracy Profiler
+  License: MIT
+  Used for: Real-time performance profiling.
+  Website: https://github.com/wolfpld/tracy
+
+-------------------------------------------------------------------------------
+FRONTEND STACK
+-------------------------------------------------------------------------------
+
+The web-based control interface is built using:
+- React (MIT)
+- TypeScript (Apache 2.0)
+- Vite (MIT)
+- Tailwind CSS (MIT)
+- Radix UI (MIT)
+- Lucide Icons (ISC)
+
+===============================================================================
+Legal Note:
+All trademarks and registered trademarks are the property of their respective
+owners. This software is distributed under the BSD 3-Clause License.
+For full licensing details, please refer to the LICENSE file included in
+this package.
+===============================================================================

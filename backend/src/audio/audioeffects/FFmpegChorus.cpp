@@ -1,4 +1,5 @@
-#include "FFmpegAtempo.h"
+
+#include "FFmpegChorus.h"
 #include "backend/src/logger.h"
 
 extern "C" {
@@ -18,21 +19,21 @@ extern "C" {
 
 namespace audio_utils {
 
-    FFmpegAtempo::~FFmpegAtempo() { destroyGraph(); }
+    FFmpegChorus::~FFmpegChorus() { destroyGraph(); }
 
-    bool FFmpegAtempo::Init() { return Init(Config{}); }
+    bool FFmpegChorus::Init() { return Init(Config{}); }
 
-    bool FFmpegAtempo::Init(const Config& cfg) {
+    bool FFmpegChorus::Init(const Config& cfg) {
         destroyGraph();
         return buildGraph(cfg);
     }
 
-    bool FFmpegAtempo::Reconfigure(const Config& cfg) {
+    bool FFmpegChorus::Reconfigure(const Config& cfg) {
         destroyGraph();
         return buildGraph(cfg);
     }
 
-    void FFmpegAtempo::destroyGraph() {
+    void FFmpegChorus::destroyGraph() {
         if (inFrame_)  av_frame_free(&inFrame_);
         if (outFrame_) av_frame_free(&outFrame_);
         if (graph_)    avfilter_graph_free(&graph_);
@@ -40,16 +41,14 @@ namespace audio_utils {
         ringRead_ = ringWrite_ = ringCount_ = 0;
     }
 
-    void FFmpegAtempo::ensureScratch(std::vector<float>& v, size_t n) {
+    void FFmpegChorus::ensureScratch(std::vector<float>& v, size_t n) {
         if (v.size() < n) v.resize(n);
     }
 
-    bool FFmpegAtempo::buildGraph(const Config& cfg) {
+    bool FFmpegChorus::buildGraph(const Config& cfg) {
         sampleRate_ = cfg.sampleRate;
         graph_ = avfilter_graph_alloc();
         if (!graph_) return false;
-
-        float clampedTempo = std::max(0.5f, std::min(2.0f, cfg.tempo));
 
         char srcArgs[256];
         std::snprintf(srcArgs, sizeof(srcArgs),
@@ -60,11 +59,13 @@ namespace audio_utils {
             destroyGraph(); return false;
         }
 
-        AVFilterContext* tempoCtx = nullptr;
-        char tempoArgs[64];
-        std::snprintf(tempoArgs, sizeof(tempoArgs), "tempo=%.3f", clampedTempo);
+        AVFilterContext* chorusCtx = nullptr;
+        char chorusArgs[128];
+        // Formato: in_gain:out_gain:delays:decays:speeds:depths
+        std::snprintf(chorusArgs, sizeof(chorusArgs), "%.3f:%.3f:%.2f:%.3f:%.3f:%.3f",
+            cfg.inGain, cfg.outGain, cfg.delayMs, cfg.decay, cfg.speed, cfg.depth);
 
-        if (avfilter_graph_create_filter(&tempoCtx, avfilter_get_by_name("atempo"), "tempo", tempoArgs, nullptr, graph_) < 0) {
+        if (avfilter_graph_create_filter(&chorusCtx, avfilter_get_by_name("chorus"), "chorus", chorusArgs, nullptr, graph_) < 0) {
             destroyGraph(); return false;
         }
 
@@ -77,8 +78,8 @@ namespace audio_utils {
             destroyGraph(); return false;
         }
 
-        if (avfilter_link(srcCtx_, 0, tempoCtx, 0) < 0 ||
-            avfilter_link(tempoCtx, 0, fmtCtx, 0) < 0 ||
+        if (avfilter_link(srcCtx_, 0, chorusCtx, 0) < 0 ||
+            avfilter_link(chorusCtx, 0, fmtCtx, 0) < 0 ||
             avfilter_link(fmtCtx, 0, sinkCtx_, 0) < 0) {
             destroyGraph(); return false;
         }
@@ -89,7 +90,7 @@ namespace audio_utils {
 
         inFrame_ = av_frame_alloc();
         outFrame_ = av_frame_alloc();
-    
+
         ringSize_ = 65536 * 2;
         ringBuf_.assign(ringSize_, 0.0f);
         scratchPlanar_.assign(16384, 0.0f);
@@ -98,27 +99,25 @@ namespace audio_utils {
         return true;
     }
 
-    bool FFmpegAtempo::pushFrame(const float* left, const float* right, size_t numFrames) {
+    bool FFmpegChorus::pushFrame(const float* left, const float* right, size_t numFrames) {
         av_frame_unref(inFrame_);
         inFrame_->nb_samples = static_cast<int>(numFrames);
-        inFrame_->format = AV_SAMPLE_FMT_FLTP; // Planar
+        inFrame_->format = AV_SAMPLE_FMT_FLTP;
         inFrame_->sample_rate = sampleRate_;
         av_channel_layout_default(&inFrame_->ch_layout, 2);
 
         if (av_frame_get_buffer(inFrame_, 0) < 0) return false;
 
-        // Copy each channel to its own plane
         std::memcpy(inFrame_->data[0], left, numFrames * sizeof(float));
         std::memcpy(inFrame_->data[1], right, numFrames * sizeof(float));
 
         return av_buffersrc_add_frame_flags(srcCtx_, inFrame_, AV_BUFFERSRC_FLAG_KEEP_REF) >= 0;
     }
 
-    void FFmpegAtempo::drainAvailable() {
+    void FFmpegChorus::drainAvailable() {
         while (av_buffersink_get_frame(sinkCtx_, outFrame_) >= 0) {
             size_t nf = static_cast<size_t>(outFrame_->nb_samples);
             if (outFrame_->format == AV_SAMPLE_FMT_FLTP) {
-                // Copia planare -> interleaved nel ring buffer
                 ensureScratch(scratchDrain_, nf * 2);
                 const float *l = reinterpret_cast<const float*>(outFrame_->data[0]);
                 const float *r = reinterpret_cast<const float*>(outFrame_->data[1]);
@@ -134,7 +133,7 @@ namespace audio_utils {
         }
     }
 
-    void FFmpegAtempo::ringPush(const float* data, size_t numFloats) {
+    void FFmpegChorus::ringPush(const float* data, size_t numFloats) {
         if (numFloats == 0) return;
         if (ringCount_ + numFloats > ringSize_) {
             size_t toDrop = (ringCount_ + numFloats) - ringSize_;
@@ -148,7 +147,7 @@ namespace audio_utils {
         ringCount_ += numFloats;
     }
 
-    size_t FFmpegAtempo::ringPop(float* dst, size_t numFloats) {
+    size_t FFmpegChorus::ringPop(float* dst, size_t numFloats) {
         size_t avail = std::min(numFloats, ringCount_);
         if (avail == 0) return 0;
         size_t first = std::min(avail, ringSize_ - ringRead_);
@@ -159,9 +158,8 @@ namespace audio_utils {
         return avail;
     }
 
-    void FFmpegAtempo::ProcessBlockStereo(float* inOut, size_t numFrames, float pre_gain) {
+    void FFmpegChorus::ProcessBlockStereo(float* inOut, size_t numFrames, float pre_gain) {
         if (!srcCtx_ || !sinkCtx_) return;
-
         ensureScratch(scratchPlanar_, numFrames * 2);
 
         float* leftPtr = scratchPlanar_.data();
@@ -181,7 +179,7 @@ namespace audio_utils {
         }
     }
 
-    void FFmpegAtempo::ProcessBlockStereoPlanar(float* left, float* right, size_t numFrames, float pre_gain) {
+    void FFmpegChorus::ProcessBlockStereoPlanar(float* left, float* right, size_t numFrames, float pre_gain) {
         if (!srcCtx_ || !sinkCtx_) return;
 
         if (pre_gain == 1.0f) {

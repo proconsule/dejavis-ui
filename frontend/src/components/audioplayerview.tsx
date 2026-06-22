@@ -29,7 +29,7 @@ export function AudioPlayerView({ idx, sendSignal }: AudioPlayerViewProps) {
   const kbps = fileplayer?.bitrate ? Math.round(fileplayer?.bitrate / 1000) : 0;
 
   useEffect(() => {
-    sendSignal({msgid: 5003,type: 0, idx: idx});
+    sendSignal({msgid: 5005, type: 0, idx: idx});
   },[]);
 
   useEffect(() => {

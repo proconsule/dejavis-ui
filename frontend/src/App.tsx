@@ -16,6 +16,8 @@ import { Separator } from "@/components/ui/separator"
 import {AudioPlayerDashboard} from "@/components/audioplayer-dashboard.tsx";
 import {VideoMixerDashboard} from "@/components/videomixer-dashboard.tsx";
 import {GlobalPiP} from "@/components/rtc/globalpip.tsx";
+import { useDeviceCapabilities } from "./hooks/use-mobile";
+import {SystemOverviewMobile} from "@/components/mobile/system-overview-mobile.tsx";
 
 const connectionLabels: Record<number, string> = {
   0: "Connecting",
@@ -254,11 +256,33 @@ function DashboardLayout() {
   );
 }
 
-export default function App() {
+function MobileLayout() {
   return (
-       <SidebarProvider>
-        <DashboardLayout />
-      </SidebarProvider>
+      <div className="flex flex-col min-h-screen w-full bg-slate-50 text-slate-900">
+        <div className="p-4">
+          <h1 className="text-xl font-black uppercase">Dejavis Mobile</h1>
+          <p className="text-sm text-slate-500">Interfaccia ottimizzata per touch</p>
+        </div>
+        <main className="flex-1">
+          <SystemOverviewMobile />
+        </main>
+        {/* Esempio di Bottom Navigation */}
+        <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 p-4 flex justify-around">
+          <LayoutDashboard className="text-slate-400" />
+          <PlayCircle className="text-slate-400" />
+          <BookAudio className="text-slate-400" />
+        </nav>
+      </div>
+  );
+}
 
+
+export default function App() {
+  const caps = useDeviceCapabilities();
+
+  return (
+      <SidebarProvider>
+        {caps.isMobile ? <MobileLayout /> : <DashboardLayout />}
+      </SidebarProvider>
   );
 }

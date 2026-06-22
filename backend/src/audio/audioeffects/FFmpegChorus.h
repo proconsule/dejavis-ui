@@ -1,12 +1,8 @@
-//
-// Created by ceco on 19/06/2026.
-//
 
-#ifndef DEJAVIS_UI_FFMPEGATEMPO_H
-#define DEJAVIS_UI_FFMPEGATEMPO_H
+#ifndef DEJAVIS_APP_FFMPEG_CHORUS_H
+#define DEJAVIS_APP_FFMPEG_CHORUS_H
 
 #include "audioeffects.h"
-
 #include <vector>
 
 struct AVFilterGraph;
@@ -14,18 +10,24 @@ struct AVFilterContext;
 struct AVFrame;
 
 namespace audio_utils {
-    class FFmpegAtempo : public AudioEffect {
+
+    class FFmpegChorus : public AudioEffect {
     public:
         struct Config {
             int   sampleRate = 48000;
-            float tempo      = 1.0f; // Range [0.5, 2.0] for high quality
+            float inGain     = 0.4f;
+            float outGain    = 0.4f;
+            float delayMs    = 55.0f; // Tipico 40-60ms
+            float decay      = 0.4f;
+            float speed     = 0.25f;
+            float depth      = 2.0f;
         };
 
-        FFmpegAtempo() = default;
-        ~FFmpegAtempo();
+        FFmpegChorus() = default;
+        ~FFmpegChorus();
 
-        FFmpegAtempo(const FFmpegAtempo&) = delete;
-        FFmpegAtempo& operator=(const FFmpegAtempo&) = delete;
+        FFmpegChorus(const FFmpegChorus&) = delete;
+        FFmpegChorus& operator=(const FFmpegChorus&) = delete;
 
         bool Init() override;
         bool Init(const Config& cfg);
@@ -63,4 +65,4 @@ namespace audio_utils {
     };
 }
 
-#endif //DEJAVIS_UI_FFMPEGATEMPO_H
+#endif

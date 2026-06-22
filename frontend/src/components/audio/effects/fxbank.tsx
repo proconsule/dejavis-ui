@@ -75,7 +75,7 @@ export const FxBank = memo(function FxBank({ channelIdx, fxData }: FxBankProps) 
         const fxNames: Record<number, string> = {
             1: "Limiter",
             2: "Echo",
-            3: "Tempo",
+            3: "Chorus",
         };
 
         return fxNames[type] || "Unknown FX";
@@ -127,7 +127,7 @@ export const FxBank = memo(function FxBank({ channelIdx, fxData }: FxBankProps) 
                                     onClick={() => handleAddEffect(3)}
                                     className="text-left px-2 py-1 text-[9px] text-zinc-300 hover:bg-violet-600 hover:text-white rounded transition-colors"
                                 >
-                                    + Tempo
+                                    + Chorus
                                 </button>
                             </div>
                         )}

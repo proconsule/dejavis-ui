@@ -53,13 +53,13 @@ namespace audio_utils {
                 return -1;
             }
             effect = echo;
-        } else if (cfg.type == EffectType::Atempo) {
-            auto tempo = std::make_shared<FFmpegAtempo>();
-            if (!tempo->Init(cfg.atempo)) {
-                DEJAVISUI_LOG_ERROR("ERROR: FFmpegAtempo Init failed for slot %d", slotId);
+        } else if (cfg.type == EffectType::Chorus) {
+            auto chorus = std::make_shared<FFmpegChorus>();
+            if (!chorus->Init(cfg.chorus)) {
+                DEJAVISUI_LOG_ERROR("ERROR: FFmpegChorus Init failed for slot %d", slotId);
                 return -1;
             }
-            effect = tempo;
+            effect = chorus;
         } else {
             return -1;
         }
@@ -155,10 +155,10 @@ namespace audio_utils {
             auto echo = std::make_shared<FFmpegEcho>();
             if (!echo->Init(cfg.echo)) return false;
             newEffect = echo;
-        } else if (cfg.type == EffectType::Atempo) {
-            auto tempo = std::make_shared<FFmpegAtempo>();
-            if (!tempo->Init(cfg.atempo)) return false;
-            newEffect = tempo;
+        } else if (cfg.type == EffectType::Chorus) {
+            auto chorus = std::make_shared<FFmpegChorus>();
+            if (!chorus->Init(cfg.chorus)) return false;
+            newEffect = chorus;
         } else {
             return false;
         }
@@ -209,7 +209,7 @@ namespace audio_utils {
         return false;
     }
 
-    bool EffectBank::SetAtempoParams(int slotId, const FFmpegAtempo::Config& cfg) {
+    bool EffectBank::SetChorusParams(int slotId, const FFmpegChorus::Config& cfg) {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
@@ -217,17 +217,16 @@ namespace audio_utils {
         if (!chain) return false;
 
         for (size_t i = 0; i < chain->effects.size(); ++i) {
-            if (dynamic_cast<FFmpegAtempo*>(chain->effects[i].get())) {
+            if (dynamic_cast<FFmpegChorus*>(chain->effects[i].get())) {
                 SlotConfig wrap;
-                wrap.type = EffectType::Atempo;
-                wrap.atempo = cfg;
+                wrap.type = EffectType::Chorus;
+                wrap.chorus = cfg;
                 wrap.meterDecaySec = s.lastCfg.meterDecaySec;
                 return ReconfigureEffect(slotId, i, wrap);
             }
         }
         return false;
     }
-
 
     bool EffectBank::IsActive(int slotId) const {
         return validSlot(slotId);
@@ -377,9 +376,14 @@ namespace audio_utils {
                     effJson["delayMs"] = s.lastCfg.echo.delayMs;
                     effJson["decay"] = s.lastCfg.echo.decay;
                     effJson["outAmplitude"] = s.lastCfg.echo.outAmplitude;
-                } else if (auto* tempo = dynamic_cast<FFmpegAtempo*>(eff.get())) {
-                    effJson["type"] = (int)EffectType::Atempo;
-                    effJson["tempo"] = s.lastCfg.atempo.tempo;
+                } else if (auto* chorus = dynamic_cast<FFmpegChorus*>(eff.get())) {
+                    effJson["type"] = (int)EffectType::Chorus;
+                    effJson["inGain"] = s.lastCfg.chorus.inGain;
+                    effJson["outGain"] = s.lastCfg.chorus.outGain;
+                    effJson["delayMs"] = s.lastCfg.chorus.delayMs;
+                    effJson["decay"] = s.lastCfg.chorus.decay;
+                    effJson["speed"] = s.lastCfg.chorus.speed;
+                    effJson["depth"] = s.lastCfg.chorus.depth;
                 }
                 effectsArray.append(effJson);
             }

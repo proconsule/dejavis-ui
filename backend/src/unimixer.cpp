@@ -371,13 +371,18 @@ void cunimixer::AddInputAudioFX(int _idx, audio_utils::EffectBank::EffectType _e
         audio_ref->AUDIO_MIXER.input_effectBank.AddEffectToSlot(_idx, cfg);
 
     }
-    if (_effecttype == audio_utils::EffectBank::EffectType::Atempo) {
+    if (_effecttype == audio_utils::EffectBank::EffectType::Chorus) {
         audio_utils::EffectBank::SlotConfig cfg;
-        cfg.type = audio_utils::EffectBank::EffectType::Atempo;
-        cfg.atempo.sampleRate = 48000;
-        cfg.atempo.tempo = 0.5f;
+        cfg.type = audio_utils::EffectBank::EffectType::Chorus;
+        cfg.chorus.sampleRate = 48000;
+        cfg.chorus.inGain     = 0.6f;
+        cfg.chorus.outGain    = 0.6f;
+        cfg.chorus.delayMs    = 50.0f;
+        cfg.chorus.decay      = 0.4f;
+        cfg.chorus.speed      = 0.15f;
+        cfg.chorus.depth      = 1.5f;
+        cfg.meterDecaySec     = 0.1f;
         audio_ref->AUDIO_MIXER.input_effectBank.AddEffectToSlot(_idx, cfg);
-
     }
 }
 

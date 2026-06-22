@@ -30,7 +30,7 @@ export function AudioPlayerDashboard() {
                                 onHit={() => {
                                     setMixerId(index);
                                     setInputType(input.type);
-                                    sendMessage({msgid: 5003, idx: index});
+                                    sendMessage({msgid: 5005, idx: index});
                                 }}
                             />
                         ))

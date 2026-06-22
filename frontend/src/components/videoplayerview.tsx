@@ -37,7 +37,7 @@ export function VideoPlayerView({ audio_mixer_idx,video_mixer_idx, sendSignal }:
 
 
   useEffect(() => {
-    sendSignal({msgid: 5003,type: 3, idx: audio_mixer_idx});
+    sendSignal({msgid: 5005,type: 3, idx: audio_mixer_idx});
   },[]);
 
   useEffect(() => {

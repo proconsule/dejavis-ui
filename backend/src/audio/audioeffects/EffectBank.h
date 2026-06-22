@@ -4,7 +4,7 @@
 #include "audioeffects.h"
 #include "FFmpegLimiter.h"
 #include "FFmpegEcho.h"
-#include "FFmpegAtempo.h"
+#include "FFmpegChorus.h"
 
 #include <atomic>
 #include <memory>
@@ -20,14 +20,14 @@ namespace audio_utils {
             None,
             Limiter,
             Echo,
-            Atempo
+            Chorus
         };
 
         struct SlotConfig {
             EffectType type = EffectType::None;
             FFmpegLimiter::Config limiter;
             FFmpegEcho::Config    echo;
-            FFmpegAtempo::Config  atempo;
+            FFmpegChorus::Config  chorus;
             float meterDecaySec = 1.5f;
         };
 
@@ -59,7 +59,7 @@ namespace audio_utils {
 
         bool SetLimiterParams(int slotId, const FFmpegLimiter::Config& cfg);
         bool SetEchoParams(int slotId, const FFmpegEcho::Config& cfg);
-        bool SetAtempoParams(int slotId, const FFmpegAtempo::Config& cfg);
+        bool SetChorusParams(int slotId, const FFmpegChorus::Config& cfg);
 
         Json::Value GetSlotConfigJson(int slotId) const;
 

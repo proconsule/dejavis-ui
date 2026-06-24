@@ -90,7 +90,14 @@ public:
 
     void SetColor(int _mixeridx, ColorParams &params);
 
+    void SetYuvChromaKey(int _mixeridx, float r, float g, float b, float tolerance);
+    void SetYuvLumaKey(int _mixeridx, float luma, float tolerance);
+    void DisableYuvKeyer(int _mixeridx);
+
+
     void SetVideoMixerProps(videomixeritem &prop, int _viddeo_mixerid);
+
+    void SetDownscale_Lanczos(int _viddeo_mixerid, bool _active);
 
 
     /* AUDIO HELPERS */

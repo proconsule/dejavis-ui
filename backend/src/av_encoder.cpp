@@ -287,7 +287,6 @@ void CAV_ENCODER::pushToServices(AVPacket* pkt, bool is_video) {
         cb_copy = m_encoded_packet_callback;
     }
 
-
     if (cb_copy) {
         AVCodecContext* src_codec = is_video ? m_video_codec_ctx : m_audio_codec_ctx;
         cb_copy(pkt, is_video, src_codec->time_base);
@@ -298,37 +297,24 @@ void CAV_ENCODER::pushToServices(AVPacket* pkt, bool is_video) {
     std::vector<std::shared_ptr<OutputService>> services_to_process;
     {
         std::lock_guard<std::mutex> lock(m_services_vector_mutex);
-        services_to_process = m_active_services; // Copia veloce di smart pointers
+        services_to_process = m_active_services;
     }
 
-
-
-    if (m_active_services_count.load() == 0) {
-        static int warn_count = 0;
-        return;
-    }
-    /*
     for (auto& service : services_to_process) {
-        if (!service->connected.load()) {
-            static int conn_warn = 0;
-            continue;
-        }
-        std::lock_guard<std::mutex> lock(service->service_mutex);
-
-        AVPacket* local_pkt = av_packet_clone(pkt);
-        if (!local_pkt) continue;
+        if (!service->connected.load()) continue;
 
         AVStream* target_stream = is_video ? service->video_stream : service->audio_stream;
         AVCodecContext* codec_ctx = is_video ? m_video_codec_ctx : m_audio_codec_ctx;
 
-        if (!target_stream) {
-            av_packet_free(&local_pkt);
-            continue;
-        }
+        if (!target_stream) continue;
+
+        AVPacket* local_pkt = av_packet_clone(pkt);
+        if (!local_pkt) continue;
 
         av_packet_rescale_ts(local_pkt, codec_ctx->time_base, target_stream->time_base);
         local_pkt->stream_index = target_stream->index;
 
+        std::lock_guard<std::mutex> lock(service->service_mutex);
         int64_t& last_dts = is_video ? service->last_dts_v : service->last_dts_a;
 
         if (local_pkt->dts <= last_dts) {
@@ -339,37 +325,7 @@ void CAV_ENCODER::pushToServices(AVPacket* pkt, bool is_video) {
         }
         last_dts = local_pkt->dts;
 
-        int ret = av_interleaved_write_frame(service->fmt_ctx, local_pkt);
-        if (ret < 0) {
-            char errbuf[256];
-            av_strerror(ret, errbuf, sizeof(errbuf));
-            DEJAVISUI_LOG_ERROR("[ENCODER] Errore scrittura su %s: %s", service->url.c_str(), errbuf);
-            service->connected.store(false);
-        } else {
-
-        }
-
-        av_packet_free(&local_pkt);
-
-    }
-    */
-    for (auto& service : services_to_process) {
-        if (!service->connected.load()) continue;
-
-        // Prepariamo i metadati (PTS/DTS/StreamIndex) prima di inviarlo alla coda
-        // per evitare race conditions tra i vari thread dei servizi.
-        AVStream* target_stream = is_video ? service->video_stream : service->audio_stream;
-        AVCodecContext* codec_ctx = is_video ? m_video_codec_ctx : m_audio_codec_ctx;
-
-        if (!target_stream) continue;
-
-        // Nota: Qui scaliamo i tempi PRIMA di clonare per la coda,
-        // oppure lo facciamo dentro EnqueuePacket. Facciamolo qui per semplicità:
-        av_packet_rescale_ts(pkt, codec_ctx->time_base, target_stream->time_base);
-        pkt->stream_index = target_stream->index;
-
-        // Invio asincrono
-        service->EnqueuePacket(pkt);
+        service->EnqueuePacket(local_pkt);
     }
 }
 

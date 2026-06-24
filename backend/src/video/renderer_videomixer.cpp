@@ -1,5 +1,6 @@
 #include "renderer.h"
 
+
 const char* mixer_vertexshader_source = R"(
 #version 450
 layout(push_constant) uniform LayerLayout {
@@ -7,10 +8,12 @@ layout(push_constant) uniform LayerLayout {
     vec2 scale;
     float alpha;
     int yFlip;
+    int useLanczos;
 } push;
 
 layout(location = 0) out vec2 fragTexCoord;
-layout(location = 1) out float fragAlpha; // Passiamo l'alpha al fragment
+layout(location = 1) out float fragAlpha;
+layout(location = 2) out vec2 fragScale;
 
 vec2 positions[6] = vec2[](
     vec2(-1.0, -1.0), vec2( 1.0, -1.0), vec2(-1.0,  1.0),
@@ -27,24 +30,11 @@ void main() {
 
     vec2 coords = texCoords[gl_VertexIndex];
     if (push.yFlip == 1) {
-        coords.y = 1.0 - coords.y; // Inverte l'asse Y della texture
+        coords.y = 1.0 - coords.y;
     }
     fragTexCoord = coords;
     fragAlpha = push.alpha;
-}
-)";
-
-const char* mixer_fragshader_source_test = R"(
-#version 450
-
-// Aggiungi 'uniform' e preferibilmente specifica il set
-layout(set = 0, binding = 0) uniform sampler2D inputTexture;
-
-layout(location = 0) in vec2 fragTexCoord;
-layout(location = 0) out vec4 outColor;
-
-void main() {
-    outColor = vec4(1.0, 0.0, 0.0, 0.5); // Rosso al 50%
+    fragScale = push.scale;
 }
 )";
 
@@ -52,13 +42,67 @@ const char* mixer_fragshader_source = R"(
 #version 450
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in float fragAlpha;
+layout(location = 2) in vec2 fragScale;
 layout(location = 0) out vec4 outColor;
 layout(binding = 0) uniform sampler2D texSampler;
 
+layout(push_constant) uniform LayerLayout {
+    vec2 position;
+    vec2 scale;
+    float alpha;
+    int yFlip;
+    int useLanczos;
+} push;
+
+float cubic(float x) {
+    float a = -0.5;
+    float absX = abs(x);
+    if (absX <= 1.0) {
+        return (a + 2.0) * pow(absX, 3.0) - (a + 3.0) * pow(absX, 2.0) + 1.0;
+    } else if (absX < 2.0) {
+        return a * pow(absX, 3.0) - 5.0 * a * pow(absX, 2.0) + 8.0 * a * absX - 4.0 * a;
+    }
+    return 0.0;
+}
+
 void main() {
-    vec4 texColor = texture(texSampler, fragTexCoord);
-    float finalAlpha = texColor.a * fragAlpha;
-    outColor = vec4(texColor.rgb * finalAlpha, finalAlpha);
+    if (push.useLanczos == 0) {
+        vec4 texColor = texture(texSampler, fragTexCoord);
+        outColor = vec4(texColor.rgb, texColor.a * fragAlpha);
+        return;
+    }
+
+    ivec2 texSize = textureSize(texSampler, 0);
+    vec2 pixelPos = fragTexCoord * vec2(texSize);
+
+    // Centro del pixel
+    vec2 fPos = pixelPos;
+    vec2 iPos = floor(fPos);
+    vec2 dist = fPos - iPos;
+
+    vec3 colorSum = vec3(0.0);
+    float weightSum = 0.0;
+
+    for(int i = -1; i <= 2; i++) {
+        for(int j = -1; j <= 2; j++) {
+            ivec2 sampleCoord = ivec2(iPos) + ivec2(i, j);
+
+            float weight = cubic(dist.x - float(i)) * cubic(dist.y - float(j));
+
+            if (sampleCoord.x >= 0 && sampleCoord.x < texSize.x &&
+                sampleCoord.y >= 0 && sampleCoord.y < texSize.y) {
+
+                vec4 sampleCol = texelFetch(texSampler, sampleCoord, 0);
+                colorSum += sampleCol.rgb * weight;
+                weightSum += weight;
+            }
+        }
+    }
+
+    vec3 finalRgb = colorSum / max(weightSum, 0.0001);
+    float texAlpha = texture(texSampler, fragTexCoord).a;
+
+    outColor = vec4(finalRgb, texAlpha * fragAlpha);
 }
 )";
 
@@ -68,7 +112,8 @@ struct LayerLayout {
     float scale[2];
     float alpha;
     int yFlip;         // 1 per attivare il flip, 0 altrimenti
-    float padding[2];  // Allineamento a 16 byte
+    int useLanzcos;
+    float padding;
 };
 
 bool CRenderer::initVideoMixer() {
@@ -330,7 +375,6 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             outX = baseScale * (textureRatio / canvasRatio);
         }
     };
-    //DEJAVISUI_LOG_DEBUG("AAAAAAAAAAAAA %d %d %d %d %d",_mixerprop->originalIdx,usedecoderimage,useimageviewverimage,usendi,useurldecoderimage);
 
     if (_mixerprop->originalIdx == 0) { //should be projectM
         if (m_projectm_wrapper) {
@@ -339,7 +383,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
 
         }
     }else if (usedecoderimage) {
@@ -361,7 +405,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
         }
     } else if (usendi) {
         if (_mixerprop->ndi_receiver->getOutputWidth() > 0) {
@@ -380,7 +424,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                            _mixerprop->pos_x, _mixerprop->pos_y,
                            finalScaleX, finalScaleY,
-                           _mixerprop->alpha, _mixerprop->y_flip);
+                           _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
         }
     } else if (useurldecoderimage) {
         if (_mixerprop->AV_STREAM_DECODER->getOutputWidth() > 0) {
@@ -392,7 +436,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, _mixerprop->AV_STREAM_DECODER->getMixerDescriptorSet(),
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
         }
     } else if (useimageviewverimage) {
         if (_mixerprop->img_viewver->getOutputWidth() > 0) {
@@ -404,26 +448,16 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
         }
     }
 }
 
 void CRenderer::drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
                                float x, float y, float scaleX, float scaleY,
-                               float alpha, bool yFlip) {
+                               float alpha, bool yFlip,bool useLanzcos) {
     if (m_mixerPipeline == VK_NULL_HANDLE || textureSet == VK_NULL_HANDLE) return;
-    /*
-    auto& cur = m_master_per_frame[m_display.currentFrame];
 
-    //vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mixerPipeline);
-
-    // Viewport e Scissor dinamici
-    VkViewport viewport{ 0.0f, 0.0f, (float)cur.image.width, (float)cur.image.height, 0.0f, 1.0f };
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    VkRect2D scissor{ {0, 0}, { cur.image.width, cur.image.height } };
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-    */
     // Push Constants
     LayerLayout push{};
     push.position[0] = x;
@@ -432,8 +466,9 @@ void CRenderer::drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
     push.scale[1]    = scaleY;
     push.alpha       = alpha;
     push.yFlip       = yFlip ? 1 : 0;
+    push.useLanzcos   = useLanzcos ? 1 : 0;
 
-    vkCmdPushConstants(cmd, m_mixerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(LayerLayout), &push);
+    vkCmdPushConstants(cmd, m_mixerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(LayerLayout), &push);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mixerPipelineLayout, 0, 1, &textureSet, 0, nullptr);
     vkCmdDraw(cmd, 6, 1, 0, 0);
@@ -688,20 +723,6 @@ void CRenderer::RemoveImageFromMixer(int slot) {
         videoMixerTextures[slot] = videomixeritem();
         CleanupTexture(videoTextures[slot].VkTexture);
     }
-}
-
-bool CRenderer::AddAVDecoderToMixer(std::string url, int _mixerid) {
-    int slot = FindFreeVideoMixerSlot();
-    if (slot < 0) {
-        return false;
-    }
-    if (m_audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->isActive)return false;
-
-    videoMixerTextures[slot].AV_DECODER = new CAV_DECODER();
-    bool success = videoMixerTextures[slot].AV_DECODER->open(url,m_audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->buffer_planar.get(),48000,2);
-    m_audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->isActive = true;
-    m_audio->AUDIO_MIXER.getMixerInputItem(_mixerid)->type = 3;
-    return success;
 }
 
 void CRenderer::SetKeyer(int _mixeridx,FxKeyerMode _keyer) {

@@ -213,6 +213,7 @@ void cunimixer::SetLumaKey(int _mixeridx,LumaKeyParams &params) {
 
 void cunimixer::SetChromaKey(int _mixeridx,KeyerPushConstants &params) {
 
+
     if(params.enabled >0.0) {
         SetKeyer(_mixeridx,FxKeyerMode::Chroma);
     }
@@ -244,6 +245,8 @@ void cunimixer::SetChromaKey(int _mixeridx,KeyerPushConstants &params) {
 
     }
 }
+
+
 
 void cunimixer::SetColor(int _mixeridx, ColorParams &params) {
     std::lock_guard<std::mutex> lock(video_ref->m_videoMixerMutex);
@@ -278,6 +281,11 @@ void cunimixer::SetVideoMixerProps(videomixeritem &prop,int _viddeo_mixerid) {
     video_ref->videoMixerTextures[_viddeo_mixerid].alpha = prop.alpha;
     video_ref->videoMixerTextures[_viddeo_mixerid].layer = prop.layer;
 
+}
+
+void cunimixer::SetDownscale_Lanczos(int _viddeo_mixerid,bool _active) {
+    DEJAVISUI_LOG_DEBUG("Lanczos downscale %d",_active);
+    video_ref->videoMixerTextures[_viddeo_mixerid].useLanczos = _active;
 }
 
 

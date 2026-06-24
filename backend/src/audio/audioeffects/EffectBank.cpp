@@ -60,6 +60,20 @@ namespace audio_utils {
                 return -1;
             }
             effect = chorus;
+        }else if (cfg.type == EffectType::Tremolo) {
+            auto trem = std::make_shared<FFmpegTremolo>();
+            if (!trem->Init(cfg.tremolo)) {
+                DEJAVISUI_LOG_ERROR("ERROR: FFmpegTremolo Init failed for slot %d", slotId);
+                return -1;
+            }
+            effect = trem;
+        } else if (cfg.type == EffectType::Vibrato) {
+            auto vib = std::make_shared<FFmpegVibrato>();
+            if (!vib->Init(cfg.vibrato)) {
+                DEJAVISUI_LOG_ERROR("ERROR: FFmpegVibrato Init failed for slot %d", slotId);
+                return -1;
+            }
+            effect = vib;
         } else {
             return -1;
         }
@@ -159,6 +173,14 @@ namespace audio_utils {
             auto chorus = std::make_shared<FFmpegChorus>();
             if (!chorus->Init(cfg.chorus)) return false;
             newEffect = chorus;
+        } else if (cfg.type == EffectType::Tremolo) {
+            auto trem = std::make_shared<FFmpegTremolo>();
+            if (!trem->Init(cfg.tremolo)) return false;
+            newEffect = trem;
+        } else if (cfg.type == EffectType::Vibrato) {
+            auto vib = std::make_shared<FFmpegVibrato>();
+            if (!vib->Init(cfg.vibrato)) return false;
+            newEffect = vib;
         } else {
             return false;
         }
@@ -227,6 +249,46 @@ namespace audio_utils {
         }
         return false;
     }
+
+    bool EffectBank::SetTremoloParams(int slotId, const FFmpegTremolo::Config& cfg) {
+        if (!validSlot(slotId)) return false;
+        Slot& s = *slots_[slotId];
+
+        auto chain = s.chain.load(std::memory_order_acquire);
+        if (!chain) return false;
+
+        for (size_t i = 0; i < chain->effects.size(); ++i) {
+            if (dynamic_cast<FFmpegTremolo*>(chain->effects[i].get())) {
+                SlotConfig wrap;
+                wrap.type = EffectType::Tremolo;
+                wrap.tremolo = cfg;
+                wrap.meterDecaySec = s.lastCfg.meterDecaySec;
+                return ReconfigureEffect(slotId, i, wrap);
+            }
+        }
+        return false;
+    }
+
+    bool EffectBank::SetVibratoParams(int slotId, const FFmpegVibrato::Config& cfg) {
+        if (!validSlot(slotId)) return false;
+        Slot& s = *slots_[slotId];
+
+        auto chain = s.chain.load(std::memory_order_acquire);
+        if (!chain) return false;
+
+        for (size_t i = 0; i < chain->effects.size(); ++i) {
+            if (dynamic_cast<FFmpegVibrato*>(chain->effects[i].get())) {
+                SlotConfig wrap;
+                wrap.type = EffectType::Vibrato;
+                wrap.vibrato = cfg;
+                wrap.meterDecaySec = s.lastCfg.meterDecaySec;
+                return ReconfigureEffect(slotId, i, wrap);
+            }
+        }
+        return false;
+    }
+
+
 
     bool EffectBank::IsActive(int slotId) const {
         return validSlot(slotId);
@@ -384,6 +446,14 @@ namespace audio_utils {
                     effJson["decay"] = s.lastCfg.chorus.decay;
                     effJson["speed"] = s.lastCfg.chorus.speed;
                     effJson["depth"] = s.lastCfg.chorus.depth;
+                } else if (auto* trem = dynamic_cast<FFmpegTremolo*>(eff.get())) {
+                    effJson["type"] = (int)EffectType::Tremolo;
+                    effJson["frequency"] = s.lastCfg.tremolo.frequency;
+                    effJson["depth"] = s.lastCfg.tremolo.depth;
+                } else if (auto* vib = dynamic_cast<FFmpegVibrato*>(eff.get())) {
+                    effJson["type"] = (int)EffectType::Vibrato;
+                    effJson["frequency"] = s.lastCfg.vibrato.frequency;
+                    effJson["depth"] = s.lastCfg.vibrato.depth;
                 }
                 effectsArray.append(effJson);
             }

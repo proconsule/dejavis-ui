@@ -317,6 +317,8 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/audio/audioeffects/FFmpegLimiter.cpp
         backend/src/audio/audioeffects/FFmpegEcho.cpp
         backend/src/audio/audioeffects/FFmpegChorus.cpp
+        backend/src/audio/audioeffects/FFmpegTremolo.cpp
+        backend/src/audio/audioeffects/FFmpegVibrato.cpp
 
 )
 

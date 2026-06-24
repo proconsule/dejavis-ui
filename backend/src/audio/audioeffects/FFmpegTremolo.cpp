@@ -1,5 +1,5 @@
 
-#include "FFmpegEcho.h"
+#include "FFmpegTremolo.h"
 #include "backend/src/logger.h"
 
 extern "C" {
@@ -15,25 +15,16 @@ extern "C" {
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
-#include <cmath>
 
 namespace audio_utils {
 
-    FFmpegEcho::~FFmpegEcho() { destroyGraph(); }
+    FFmpegTremolo::~FFmpegTremolo() { destroyGraph(); }
 
-    bool FFmpegEcho::Init() { return Init(Config{}); }
+    bool FFmpegTremolo::Init() { return Init(Config{}); }
+    bool FFmpegTremolo::Init(const Config& cfg) { destroyGraph(); return buildGraph(cfg); }
+    bool FFmpegTremolo::Reconfigure(const Config& cfg) { destroyGraph(); return buildGraph(cfg); }
 
-    bool FFmpegEcho::Init(const Config& cfg) {
-        destroyGraph();
-        return buildGraph(cfg);
-    }
-
-    bool FFmpegEcho::Reconfigure(const Config& cfg) {
-        destroyGraph();
-        return buildGraph(cfg);
-    }
-
-    void FFmpegEcho::destroyGraph() {
+    void FFmpegTremolo::destroyGraph() {
         if (inFrame_)  av_frame_free(&inFrame_);
         if (outFrame_) av_frame_free(&outFrame_);
         if (graph_)    avfilter_graph_free(&graph_);
@@ -41,94 +32,69 @@ namespace audio_utils {
         ringRead_ = ringWrite_ = ringCount_ = 0;
     }
 
-    void FFmpegEcho::ensureScratch(std::vector<float>& v, size_t n) {
+    void FFmpegTremolo::ensureScratch(std::vector<float>& v, size_t n) {
         if (v.size() < n) v.resize(n);
     }
 
-    bool FFmpegEcho::buildGraph(const Config& cfg) {
+    bool FFmpegTremolo::buildGraph(const Config& cfg) {
         sampleRate_ = cfg.sampleRate;
         graph_ = avfilter_graph_alloc();
         if (!graph_) return false;
 
         char srcArgs[256];
-        std::snprintf(srcArgs, sizeof(srcArgs),
-            "sample_rate=%d:sample_fmt=fltp:channel_layout=stereo:time_base=1/%d",
-            cfg.sampleRate, cfg.sampleRate);
+        std::snprintf(srcArgs, sizeof(srcArgs), "sample_rate=%d:sample_fmt=fltp:channel_layout=stereo:time_base=1/%d", cfg.sampleRate, cfg.sampleRate);
+        if (avfilter_graph_create_filter(&srcCtx_, avfilter_get_by_name("abuffer"), "in", srcArgs, nullptr, graph_) < 0) { destroyGraph(); return false; }
 
-        if (avfilter_graph_create_filter(&srcCtx_, avfilter_get_by_name("abuffer"), "in", srcArgs, nullptr, graph_) < 0) {
-            destroyGraph(); return false;
-        }
-
-        AVFilterContext* echoCtx = nullptr;
-        char echoArgs[256];
-        std::snprintf(echoArgs, sizeof(echoArgs),
-        "0.8:%.3f:%d:%.3f",
-        cfg.outAmplitude, cfg.delayMs, cfg.decay);
-
-        if (avfilter_graph_create_filter(&echoCtx, avfilter_get_by_name("aecho"), "echo", echoArgs, nullptr, graph_) < 0) {
-            destroyGraph(); return false;
-        }
+        AVFilterContext* tremCtx = nullptr;
+        char tremArgs[64];
+        std::snprintf(tremArgs, sizeof(tremArgs), "f=%.3f:d=%.3f", cfg.frequency, cfg.depth);
+        if (avfilter_graph_create_filter(&tremCtx, avfilter_get_by_name("tremolo"), "trem", tremArgs, nullptr, graph_) < 0) { destroyGraph(); return false; }
 
         AVFilterContext* fmtCtx = nullptr;
-        if (avfilter_graph_create_filter(&fmtCtx, avfilter_get_by_name("aformat"), "fmt", "sample_fmts=fltp", nullptr, graph_) < 0) {
-            destroyGraph(); return false;
-        }
+        if (avfilter_graph_create_filter(&fmtCtx, avfilter_get_by_name("aformat"), "fmt", "sample_fmts=fltp", nullptr, graph_) < 0) { destroyGraph(); return false; }
+        if (avfilter_graph_create_filter(&sinkCtx_, avfilter_get_by_name("abuffersink"), "out", nullptr, nullptr, graph_) < 0) { destroyGraph(); return false; }
 
-        if (avfilter_graph_create_filter(&sinkCtx_, avfilter_get_by_name("abuffersink"), "out", nullptr, nullptr, graph_) < 0) {
-            destroyGraph(); return false;
-        }
-
-        if (avfilter_link(srcCtx_, 0, echoCtx, 0) < 0 ||
-            avfilter_link(echoCtx, 0, fmtCtx, 0) < 0 ||
-            avfilter_link(fmtCtx, 0, sinkCtx_, 0) < 0) {
-            destroyGraph(); return false;
-        }
-
-        if (avfilter_graph_config(graph_, nullptr) < 0) {
-            destroyGraph(); return false;
-        }
+        if (avfilter_link(srcCtx_, 0, tremCtx, 0) < 0 || avfilter_link(tremCtx, 0, fmtCtx, 0) < 0 || avfilter_link(fmtCtx, 0, sinkCtx_, 0) < 0) { destroyGraph(); return false; }
+        if (avfilter_graph_config(graph_, nullptr) < 0) { destroyGraph(); return false; }
 
         inFrame_ = av_frame_alloc();
         outFrame_ = av_frame_alloc();
-        
-        ringSize_ = 32768 * 2; // Eco richiede buffer più ampi per le code sonore
+        ringSize_ = 65536 * 2;
         ringBuf_.assign(ringSize_, 0.0f);
-        scratchPlanar_.assign(8192, 0.0f);
-        scratchDrain_.assign(8192, 0.0f);
-
+        scratchPlanar_.assign(16384, 0.0f);
+        scratchDrain_.assign(16384, 0.0f);
         return true;
     }
 
-    bool FFmpegEcho::pushFrame(const float* left, const float* right, size_t numFrames) {
+    bool FFmpegTremolo::pushFrame(const float* left, const float* right, size_t numFrames) {
         av_frame_unref(inFrame_);
         inFrame_->nb_samples = static_cast<int>(numFrames);
         inFrame_->format = AV_SAMPLE_FMT_FLTP;
         inFrame_->sample_rate = sampleRate_;
         av_channel_layout_default(&inFrame_->ch_layout, 2);
         if (av_frame_get_buffer(inFrame_, 0) < 0) return false;
-
         std::memcpy(inFrame_->data[0], left, numFrames * sizeof(float));
         std::memcpy(inFrame_->data[1], right, numFrames * sizeof(float));
-
         return av_buffersrc_add_frame_flags(srcCtx_, inFrame_, AV_BUFFERSRC_FLAG_KEEP_REF) >= 0;
     }
 
-    void FFmpegEcho::drainAvailable() {
+    void FFmpegTremolo::drainAvailable() {
         while (av_buffersink_get_frame(sinkCtx_, outFrame_) >= 0) {
             size_t nf = static_cast<size_t>(outFrame_->nb_samples);
-            if (outFrame_->format == AV_SAMPLE_FMT_FLT) {
-                ringPush(reinterpret_cast<const float*>(outFrame_->data[0]), nf * 2);
-            } else if (outFrame_->format == AV_SAMPLE_FMT_FLTP) {
+            if (outFrame_->format == AV_SAMPLE_FMT_FLTP) {
                 ensureScratch(scratchDrain_, nf * 2);
-                const float *l = reinterpret_cast<const float*>(outFrame_->data[0]), *r = reinterpret_cast<const float*>(outFrame_->data[1]);
+                const float *l = reinterpret_cast<const float*>(outFrame_->data[0]);
+                const float *r = reinterpret_cast<const float*>(outFrame_->data[1]);
                 for (size_t i = 0; i < nf; ++i) { scratchDrain_[i*2] = l[i]; scratchDrain_[i*2+1] = r[i]; }
                 ringPush(scratchDrain_.data(), nf * 2);
+            } else if (outFrame_->format == AV_SAMPLE_FMT_FLT) {
+                ringPush(reinterpret_cast<const float*>(outFrame_->data[0]), nf * 2);
             }
             av_frame_unref(outFrame_);
         }
     }
 
-    void FFmpegEcho::ringPush(const float* data, size_t numFloats) {
+    void FFmpegTremolo::ringPush(const float* data, size_t numFloats) {
         if (numFloats == 0) return;
         if (ringCount_ + numFloats > ringSize_) {
             size_t toDrop = (ringCount_ + numFloats) - ringSize_;
@@ -142,7 +108,7 @@ namespace audio_utils {
         ringCount_ += numFloats;
     }
 
-    size_t FFmpegEcho::ringPop(float* dst, size_t numFloats) {
+    size_t FFmpegTremolo::ringPop(float* dst, size_t numFloats) {
         size_t avail = std::min(numFloats, ringCount_);
         if (avail == 0) return 0;
         size_t first = std::min(avail, ringSize_ - ringRead_);
@@ -153,39 +119,35 @@ namespace audio_utils {
         return avail;
     }
 
-    void FFmpegEcho::ProcessBlockStereo(float* inOut, size_t numFrames, float pre_gain) {
+    void FFmpegTremolo::ProcessBlockStereo(float* inOut, size_t numFrames, float pre_gain) {
         if (!srcCtx_ || !sinkCtx_) return;
         ensureScratch(scratchPlanar_, numFrames * 2);
-
         float* leftPtr = scratchPlanar_.data();
         float* rightPtr = scratchPlanar_.data() + numFrames;
-
-        if (pre_gain != 1.0f) for (size_t i = 0; i < numFrames * 2; ++i) inOut[i] *= pre_gain;
-
-
+        for (size_t i = 0; i < numFrames; ++i) {
+            leftPtr[i] = inOut[i*2] * pre_gain;
+            rightPtr[i] = inOut[i*2+1] * pre_gain;
+        }
         pushFrame(leftPtr, rightPtr, numFrames);
         drainAvailable();
         size_t got = ringPop(inOut, numFrames * 2);
         if (got < numFrames * 2) std::memset(inOut + got, 0, (numFrames * 2 - got) * sizeof(float));
     }
 
-    void FFmpegEcho::ProcessBlockStereoPlanar(float* left, float* right, size_t numFrames, float pre_gain) {
+    void FFmpegTremolo::ProcessBlockStereoPlanar(float* left, float* right, size_t numFrames, float pre_gain) {
         if (!srcCtx_ || !sinkCtx_) return;
-
-        std::vector<float> lGain(numFrames), rGain(numFrames);
-        for (size_t i = 0; i < numFrames; ++i) {
-            lGain[i] = left[i] * pre_gain;
-            rGain[i] = right[i] * pre_gain;
+        if (pre_gain == 1.0f) { pushFrame(left, right, numFrames); }
+        else {
+            ensureScratch(scratchPlanar_, numFrames * 2);
+            float* lG = scratchPlanar_.data(); float* rG = scratchPlanar_.data() + numFrames;
+            for (size_t i = 0; i < numFrames; ++i) { lG[i] = left[i] * pre_gain; rG[i] = right[i] * pre_gain; }
+            pushFrame(lG, rG, numFrames);
         }
-
-        pushFrame(lGain.data(), rGain.data(), numFrames);
         drainAvailable();
-
         ensureScratch(scratchPlanar_, numFrames * 2);
         size_t got = ringPop(scratchPlanar_.data(), numFrames * 2);
         size_t gotFrames = got / 2;
         for (size_t i = 0; i < gotFrames; ++i) { left[i] = scratchPlanar_[i*2]; right[i] = scratchPlanar_[i*2+1]; }
         for (size_t i = gotFrames; i < numFrames; ++i) { left[i] = 0.0f; right[i] = 0.0f; }
     }
-
-} // namespace audio_utils
+}

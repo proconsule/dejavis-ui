@@ -81,7 +81,7 @@ public:
     bool InitFFmpegVulkanHW();
 
     void LoadFileAsync(const std::string& _path);
-    bool open(const std::string& url, MultiChannelRingBuffer* audioBuf,int _samplerate,int _channels);
+
     void stop();
     void cleanup();
 

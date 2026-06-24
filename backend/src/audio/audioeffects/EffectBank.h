@@ -11,6 +11,9 @@
 #include <vector>
 #include <json/value.h>
 
+#include "FFmpegTremolo.h"
+#include "FFmpegVibrato.h"
+
 namespace audio_utils {
 
     class EffectBank
@@ -20,7 +23,9 @@ namespace audio_utils {
             None,
             Limiter,
             Echo,
-            Chorus
+            Chorus,
+            Tremolo,
+            Vibrato
         };
 
         struct SlotConfig {
@@ -28,6 +33,8 @@ namespace audio_utils {
             FFmpegLimiter::Config limiter;
             FFmpegEcho::Config    echo;
             FFmpegChorus::Config  chorus;
+            FFmpegTremolo::Config tremolo;
+            FFmpegVibrato::Config vibrato;
             float meterDecaySec = 1.5f;
         };
 
@@ -60,6 +67,9 @@ namespace audio_utils {
         bool SetLimiterParams(int slotId, const FFmpegLimiter::Config& cfg);
         bool SetEchoParams(int slotId, const FFmpegEcho::Config& cfg);
         bool SetChorusParams(int slotId, const FFmpegChorus::Config& cfg);
+        bool SetTremoloParams(int slotId, const FFmpegTremolo::Config& cfg);
+        bool SetVibratoParams(int slotId, const FFmpegVibrato::Config& cfg);
+
 
         Json::Value GetSlotConfigJson(int slotId) const;
 

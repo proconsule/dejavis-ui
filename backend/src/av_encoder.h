@@ -120,10 +120,12 @@ struct OutputService {
     }
 
     void EnqueuePacket(AVPacket* pkt) {
-        if (!connected.load()) return;
+        if (!pkt) return;
 
-        AVPacket* clone = av_packet_clone(pkt);
-        if (!clone) return;
+        if (!connected.load()) {
+            av_packet_free(&pkt);
+            return;
+        }
 
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
@@ -132,7 +134,7 @@ struct OutputService {
                 av_packet_free(&old);
                 packet_queue.pop();
             }
-            packet_queue.push(clone);
+            packet_queue.push(pkt);
         }
         queue_cv.notify_one();
     }

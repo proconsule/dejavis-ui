@@ -82,6 +82,7 @@ struct Vulkan_ShaderCompileResult {
 struct videomixeritem {
     float pos_x = 0.0f, pos_y = 0.0f, scale_x = 1.0f, scale_y = 1.0f, alpha = 1.0f;
     bool y_flip = false;
+	bool useLanczos = false;
     bool inUse = false;
 	bool isVisible = false;
     int type = -1;
@@ -227,7 +228,7 @@ public:
 
     void drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
                                float x, float y, float scaleX, float scaleY,
-                               float alpha, bool yFlip);
+                               float alpha, bool yFlip,bool useLanczos);
 
     void ProcessVideoMixer(VkCommandBuffer cmd);
 	void ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd);

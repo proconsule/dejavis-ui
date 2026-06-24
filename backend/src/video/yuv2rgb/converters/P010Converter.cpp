@@ -322,7 +322,7 @@ bool P010Converter::recordUploadFromVulkanImage(VkCommandBuffer cmd,
     yuvconv::imageBarrier(cmd, srcImg,
         srcLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         srcAccess, VK_ACCESS_TRANSFER_READ_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     // (b) Piano Y (PLANE_0, R10X6 = 2 byte/texel). rowLength in texel = strideY/2.
     VkBufferImageCopy yReg{};

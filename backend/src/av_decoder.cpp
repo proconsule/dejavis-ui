@@ -273,7 +273,7 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
 
     const bool isNetworkStream = (_path.find("://") != std::string::npos);
     shouldExit = false;
-
+    interlaced = false;
     // -------------------------------------------------------------------------
     // 1) Device Vulkan condiviso: creato UNA volta sola, persiste tra i file.
     // -------------------------------------------------------------------------
@@ -368,13 +368,16 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
 
         bool opened = false;
 
-        // 3a) Vulkan, se il device c'e' e il codec lo supporta.
         if (hw_device_ctx && v_codec && codec_supports_vulkan(v_codec)) {
             DEJAVISUI_LOG_DEBUG("[DECODER] tentativo decode Vulkan per %s", v_codec->name);
             opened = tryOpen(hw_device_ctx, AV_PIX_FMT_VULKAN);
             if (opened) {
                 hw_pix_fmt = AV_PIX_FMT_VULKAN;
                 DEJAVISUI_LOG_DEBUG("[DECODER] decode Vulkan attivo");
+                if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
+                    interlaced = true;
+                }
+
             } else {
                 DEJAVISUI_LOG_DEBUG("[DECODER] Vulkan rifiutato a runtime, provo il fallback");
             }
@@ -387,6 +390,14 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
                 if (opened) {
                     hw_pix_fmt = fallbackPixFmt();
                     DEJAVISUI_LOG_DEBUG("[DECODER] decode HW fallback attivo");
+                    if (m_video_ctx->field_order == AV_FIELD_PROGRESSIVE) {
+                        DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Progressivo");
+                    } else if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
+                        DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Interlacciato");
+                        interlaced = true;
+                    } else if (m_video_ctx->field_order == AV_FIELD_UNKNOWN) {
+                        DEJAVISUI_LOG_INFO("Ordine dei campi non specificato nei metadati del container");
+                    }
                 }
             }
         }
@@ -397,6 +408,14 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
             if (opened) {
                 hw_pix_fmt = AV_PIX_FMT_NONE;
                 DEJAVISUI_LOG_DEBUG("[DECODER] decode software attivo");
+                if (m_video_ctx->field_order == AV_FIELD_PROGRESSIVE) {
+                    DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Progressivo");
+                } else if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
+                    DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Interlacciato");
+                    interlaced = true;
+                } else if (m_video_ctx->field_order == AV_FIELD_UNKNOWN) {
+                    DEJAVISUI_LOG_INFO("Ordine dei campi non specificato nei metadati del container");
+                }
             }
         }
 
@@ -461,6 +480,8 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
     m_masterclock.reset_vis_time();
     m_running  = true;
     shouldExit = false;
+
+
 
     m_demux_thread        = std::thread(&CAV_DECODER::demuxLoop,       this);
     m_decode_video_thread = std::thread(&CAV_DECODER::decodeVideoLoop, this);
@@ -947,7 +968,7 @@ void CAV_DECODER::decodeVideoLoop() {
         if (m_seekRequested.load()) {
             if (m_video_ctx) avcodec_flush_buffers(m_video_ctx);
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue; // ricontrolla lo stato
+            continue;
         }
 
         AVPacket* pkt = nullptr;
@@ -965,39 +986,60 @@ void CAV_DECODER::decodeVideoLoop() {
         m_video_pkt_cv.notify_one();
 
         if (avcodec_send_packet(m_video_ctx, pkt) >= 0) {
-
             while (avcodec_receive_frame(m_video_ctx, m_frame_hw) >= 0) {
                 if (m_seekRequested.load() || shouldExit) {
                     av_frame_unref(m_frame_hw);
                     break;
                 }
+
+                // 1. INIZIALIZZAZIONE PIGRA AL PRIMO FRAME EFFETTIVO
+                if (interlaced && !m_filter_graph) {
+                    initDeinterlaceFilter(m_frame_hw);
+                }
+
                 // Calcolo PTS
                 double pts = (m_frame_hw->pts == AV_NOPTS_VALUE) ? 0.0 :
                     m_frame_hw->pts * av_q2d(m_fmt_ctx->streams[m_video_stream_idx]->time_base);
 
                 AVFrame* frameToQueue = nullptr;
 
-                if (m_frame_hw->format == AV_PIX_FMT_VULKAN) {
-                    // Zero-copy: NIENTE readback
-                    frameToQueue = av_frame_clone(m_frame_hw);
-                }
-                else if (m_frame_hw->hw_frames_ctx && gpucopy) {
-                    // Fallback HW (VAAPI / D3D11): readback su CPU come prima.
-                    av_frame_unref(m_frame_sw);
-                    int ret = av_hwframe_transfer_data(m_frame_sw, m_frame_hw, 0);
-                    if (ret < 0) {
-                        DEJAVISUI_LOG_ERROR("Errore nel trasferimento HW->SW: %d", ret);
-                        frameToQueue = av_frame_clone(m_frame_hw);
+                // 2. ELABORAZIONE TRAMITE FILTRO (SE ATTIVO)
+                if (m_filter_graph) {
+                    if (av_buffersrc_add_frame(m_buffer_src, m_frame_hw) >= 0) {
+                        AVFrame* filtered = av_frame_alloc();
+                        if (av_buffersink_get_frame(m_buffer_sink, filtered) >= 0) {
+                            frameToQueue = filtered; // Prende il frame modificato (HW o SW che sia)
+                        } else {
+                            av_frame_free(&filtered);
+                            frameToQueue = av_frame_clone(m_frame_hw);
+                        }
                     } else {
-                        av_frame_copy_props(m_frame_sw, m_frame_hw);
-                        frameToQueue = av_frame_clone(m_frame_sw);
+                        frameToQueue = av_frame_clone(m_frame_hw);
                     }
                 }
+                // 3. LOGICA STANDARD SENZA FILTRO
                 else {
-                    frameToQueue = av_frame_clone(m_frame_hw);
+                    if (m_frame_hw->format == AV_PIX_FMT_VULKAN) {
+                        frameToQueue = av_frame_clone(m_frame_hw);
+                    }
+                    else if (m_frame_hw->hw_frames_ctx && gpucopy) {
+                        av_frame_unref(m_frame_sw);
+                        int ret = av_hwframe_transfer_data(m_frame_sw, m_frame_hw, 0);
+                        if (ret < 0) {
+                            DEJAVISUI_LOG_ERROR("Errore nel trasferimento HW->SW: %d", ret);
+                            frameToQueue = av_frame_clone(m_frame_hw);
+                        } else {
+                            av_frame_copy_props(m_frame_sw, m_frame_hw);
+                            frameToQueue = av_frame_clone(m_frame_sw);
+                        }
+                    }
+                    else {
+                        frameToQueue = av_frame_clone(m_frame_hw);
+                    }
                 }
 
-                {
+                // 4. STRUTTURA UNIFICATA DI ACCUMULO NELLA CODA (Risolto bug di nidificazione dell'else)
+                if (frameToQueue) {
                     std::unique_lock<std::mutex> lock(m_frame_mutex);
                     m_frame_cv.wait(lock, [this] {
                         return m_frame_queue.size() < MAX_QUEUE_SIZE
@@ -1012,8 +1054,9 @@ void CAV_DECODER::decodeVideoLoop() {
                     }
 
                     m_frame_queue.push({ frameToQueue, pts });
+                    m_frame_cv.notify_all();
                 }
-                m_frame_cv.notify_all();
+
                 av_frame_unref(m_frame_hw);
             }
         }
@@ -1072,10 +1115,20 @@ void CAV_DECODER::stopLoaderThread() {
     }
 }
 
+void CAV_DECODER::cleanupDeinterlaceFilter() {
+    if (m_filter_graph) {
+        avfilter_graph_free(&m_filter_graph);
+        m_filter_graph = nullptr;
+        m_buffer_src = nullptr;
+        m_buffer_sink = nullptr;
+    }
+}
+
 void CAV_DECODER::cleanupCurrentFile() {
     DEJAVISUI_LOG_DEBUG("[DECODER] cleanupCurrentFile start");
 
     stopFileThreads();
+    cleanupDeinterlaceFilter();
 
     {
         std::lock_guard<std::mutex> lk(m_video_pkt_mutex);
@@ -1168,6 +1221,114 @@ AVFrame* CAV_DECODER::ensureSoftwareFrame(AVFrame* src, AVFrame* tmpSwBuf) {
     return tmpSwBuf;
 }
 
+void CAV_DECODER::initDeinterlaceFilter(AVFrame* frame) {
+    if (!frame || !m_video_ctx || !m_fmt_ctx || m_video_stream_idx < 0) return;
+
+    bool isHW = (frame->format == AV_PIX_FMT_VULKAN);
+    DEJAVISUI_LOG_INFO("[DECODER] Inizializzazione grafo filtri al primo frame. Modalità: %s",
+                       isHW ? "VULKAN HW" : "SOFTWARE");
+
+    m_filter_graph = avfilter_graph_alloc();
+    if (!m_filter_graph) {
+        DEJAVISUI_LOG_ERROR("[DECODER] Impossibile allocare il grafo dei filtri");
+        return;
+    }
+
+    char args[512];
+    // Se siamo in HW usiamo la yuv420p come civetta testuale, se siamo in SW usiamo il formato reale del frame
+    AVPixelFormat initFmt = isHW ? AV_PIX_FMT_YUV420P : (AVPixelFormat)frame->format;
+
+    snprintf(args, sizeof(args),
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             frame->width, frame->height,
+             initFmt,
+             m_fmt_ctx->streams[m_video_stream_idx]->time_base.num,
+             m_fmt_ctx->streams[m_video_stream_idx]->time_base.den,
+             frame->sample_aspect_ratio.num ? frame->sample_aspect_ratio.num : m_video_ctx->sample_aspect_ratio.num,
+             frame->sample_aspect_ratio.den ? frame->sample_aspect_ratio.den : m_video_ctx->sample_aspect_ratio.den);
+
+    const AVFilter* buffer_filter = avfilter_get_by_name("buffer");
+    const AVFilter* buffersink_filter = avfilter_get_by_name("buffersink");
+
+    if (avfilter_graph_create_filter(&m_buffer_src, buffer_filter, "in", args, nullptr, m_filter_graph) < 0 ||
+        avfilter_graph_create_filter(&m_buffer_sink, buffersink_filter, "out", nullptr, nullptr, m_filter_graph) < 0) {
+        DEJAVISUI_LOG_ERROR("[DECODER] Errore creazione filtri sorgente/destinazione");
+        avfilter_graph_free(&m_filter_graph);
+        return;
+    }
+
+    // PATH DI ADATTAMENTO HARDWARE
+    if (isHW) {
+        AVBufferSrcParameters* bpm = av_buffersrc_parameters_alloc();
+        if (!bpm) {
+            DEJAVISUI_LOG_ERROR("[DECODER] Impossibile allocare AVBufferSrcParameters");
+            avfilter_graph_free(&m_filter_graph);
+            return;
+        }
+
+        bpm->format = AV_PIX_FMT_VULKAN;
+        if (frame->hw_frames_ctx) {
+            // Estraiamo il contesto hardware REALE e CERTIFICATO direttamente dal frame appena decodificato
+            bpm->hw_frames_ctx = av_buffer_ref(frame->hw_frames_ctx);
+        } else {
+            DEJAVISUI_LOG_ERROR("[DECODER] Errore: Ricevuto frame Vulkan ma il suo hw_frames_ctx è NULL!");
+            av_free(bpm);
+            avfilter_graph_free(&m_filter_graph);
+            return;
+        }
+
+        int p_ret = av_buffersrc_parameters_set(m_buffer_src, bpm);
+        av_free(bpm);
+
+        if (p_ret < 0) {
+            DEJAVISUI_LOG_ERROR("[DECODER] Errore override parametri hardware nel buffer_src");
+            avfilter_graph_free(&m_filter_graph);
+            return;
+        }
+    }
+
+    // SELEZIONE DINAMICA DEL FILTRO
+    const char* filter_descr = isHW ? "bwdif_vulkan" : "bwdif";
+
+    AVFilterInOut* outputs = avfilter_inout_alloc();
+    AVFilterInOut* inputs  = avfilter_inout_alloc();
+
+    if (!outputs || !inputs) {
+        DEJAVISUI_LOG_ERROR("[DECODER] Errore allocazione input/output filtri");
+        avfilter_inout_free(&inputs);
+        avfilter_inout_free(&outputs);
+        avfilter_graph_free(&m_filter_graph);
+        return;
+    }
+
+    outputs->name       = av_strdup("in");
+    outputs->filter_ctx = m_buffer_src;
+    outputs->pad_idx    = 0;
+    outputs->next       = nullptr;
+
+    inputs->name        = av_strdup("out");
+    inputs->filter_ctx  = m_buffer_sink;
+    inputs->pad_idx     = 0;
+    inputs->next        = nullptr;
+
+    int ret = avfilter_graph_parse_ptr(m_filter_graph, filter_descr, &inputs, &outputs, nullptr);
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+
+    if (ret < 0) {
+        DEJAVISUI_LOG_ERROR("[DECODER] Errore parse filtro descr: %s", filter_descr);
+        avfilter_graph_free(&m_filter_graph);
+        return;
+    }
+
+    if (avfilter_graph_config(m_filter_graph, nullptr) < 0) {
+        DEJAVISUI_LOG_ERROR("[DECODER] Errore configurazione grafo filtri: %s", filter_descr);
+        avfilter_graph_free(&m_filter_graph);
+        return;
+    }
+
+    DEJAVISUI_LOG_INFO("[DECODER] Grafo '%s' attivato con successo al primo frame!", filter_descr);
+}
 
 Json::Value CAV_DECODER::getJsonStatus() {
 

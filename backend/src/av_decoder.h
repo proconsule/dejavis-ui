@@ -35,6 +35,9 @@ extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_vulkan.h>
 #include <libavutil/hwcontext_drm.h>
+#include <libavfilter/avfilter.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
 }
 
 #include "ringbuffer.h"
@@ -198,12 +201,20 @@ private:
 
     void stopLoaderThread();
 
+    void cleanupDeinterlaceFilter();
+
     void cleanupCurrentFile();
 
     void cleanupFFmpeg();
     void cleanupVulkan();
 
     AVFrame *ensureSoftwareFrame(AVFrame *src, AVFrame *tmpSwBuf);
+
+    void initDeinterlaceFilter(AVFrame* frame);
+
+    AVFilterGraph* m_filter_graph = nullptr;
+    AVFilterContext* m_buffer_src = nullptr;
+    AVFilterContext* m_buffer_sink = nullptr;
 
 
     std::unique_ptr<CPostProcessor> m_postProcessor;
@@ -235,7 +246,7 @@ private:
 
     VideoFileMetadata metadata;
 
-
+    bool interlaced = false;
 
     void decodeLoop();
 

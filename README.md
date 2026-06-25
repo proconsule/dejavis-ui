@@ -17,9 +17,12 @@ Since backend is controlled via websocket, anyone can write his own controller f
 Features:
 
 - Audio Mixer (16x2) Input can be live,url,file
-- Video Mixer (Vulkan based)
+- Video Mixer (Vulkan based) with integrated Post-Processing (ChromaKey,LumaKey) on RGB space (for now)
+- High-performance YUV to RGB conversion (NV12, P010, UYVY, YUV420P)
+- Support for static image sources
 - projectM vis (openGL -> Vulkan zero-copy)
-- vulkan video decode and encode (if supported by hw/drivers)
+- projectm presets persistence via SQLite
+- vulkan video decode and encode (if supported by hw/drivers (MacOS uses videotoolbox))
 - SRT output
 - SPOUT2 support (windows only)
 - Web Interface for setting/controlling
@@ -46,4 +49,4 @@ Library used:
 
 Thanks to: 
 
-- a very special tanks goes to Kai Blaschke https://github.com/kblaschkewho who gave me invaluable advice during the development of dejavis-ui
+- a very special tanks goes to Kai Blaschke https://github.com/kblaschke who gave me invaluable advice during the development of dejavis-ui

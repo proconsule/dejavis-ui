@@ -43,3 +43,7 @@ Library used:
 - SPIR-V Tools https://github.com/khronosGroup/SPIRV-Tools
 - SPOUT2 (Windows only) https://github.com/leadedge/Spout2
 - NDI SDK https://ndi.video/for-developers/ndi-sdk/
+
+Thanks to: 
+
+- a very special tanks goes to Kai Blaschke https://github.com/kblaschkewho who gave me invaluable advice during the development of dejavis-ui

@@ -296,15 +296,12 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/av_decoder.cpp
         backend/src/image_viewer.cpp
         backend/src/video/videofx_pipeline.cpp
-        #backend/src/video/yuv2rgb_pipeline.cpp
         backend/src/video/rgb2yuv_pipeline.cpp
         backend/src/ndi_receiver.cpp
         backend/src/ndi_sender.cpp
         backend/src/video/postprocess.cpp
         backend/src/video/vulkan_utils.cpp
         backend/src/video/projectm_wrapper.cpp
-        #backend/src/audio/limiter/LimiterBank.cpp
-        #backend/src/audio/limiter/FFmpegLimiter.cpp
         backend/src/video/yuv2rgb/YUV2RGBPipeline.cpp
         backend/src/video/yuv2rgb/YUVConverter_Common.cpp
         backend/src/video/yuv2rgb/converters/UYVYConverter.cpp
@@ -649,6 +646,7 @@ endif()
 
 
 if(WIN32)
+
     add_custom_command(
             TARGET dejavis-ui POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
@@ -656,6 +654,7 @@ if(WIN32)
             "${DIST_DIR}/dejavis-ui.exe"
             COMMENT "Copy dejavis-ui to dist directory"
     )
+
 elseif (LINUX)
     add_custom_command(
             TARGET dejavis-ui POST_BUILD

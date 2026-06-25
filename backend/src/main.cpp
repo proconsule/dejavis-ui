@@ -243,6 +243,7 @@ int main(int argc, char* argv[]) {
                 //app().quit();
                 running = false;
             });
+            DEJAVISUI_LOG_INFO("Listening on https port 8848");
             app().run();
         } else {
             DEJAVISUI_LOG_ERROR("NO %s - %s found, starting with http mode, no WEBRTC Audio support", certPath.c_str(), keyPath.c_str());
@@ -260,9 +261,12 @@ int main(int argc, char* argv[]) {
                 //app().quit();
                 running = false;
             });
+            DEJAVISUI_LOG_INFO("Listening on port http 8848");
             app().run();
         }
     });
+
+
     
     while(running) {
         HandleRenderChanges();

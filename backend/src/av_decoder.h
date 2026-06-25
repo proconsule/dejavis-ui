@@ -68,6 +68,9 @@ public:
         long long video_bitrate = 0;
         long long audio_bitrate = 0;
         double duration = 0.0;
+        int width = -1;
+        int height = -1;
+        double fps = 0;
     };
 
     struct DecodedFrame {

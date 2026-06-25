@@ -422,6 +422,8 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
         if (opened) {
             m_frame_hw = av_frame_alloc();
             m_frame_sw = av_frame_alloc();
+            metadata.width = m_video_ctx->width;
+            metadata.height = m_video_ctx->height;
             DEJAVISUI_LOG_DEBUG("Video Ready: %s (%dx%d) target=%s",
                 v_codec->name, m_video_ctx->width, m_video_ctx->height,
                 av_get_pix_fmt_name(hw_pix_fmt));
@@ -802,6 +804,11 @@ void CAV_DECODER::ExtractMetadataFromContexts() {
 
         metadata.duration = static_cast<double>(m_fmt_ctx->duration) / AV_TIME_BASE;
 
+        if (m_video_ctx->framerate.num > 0 && m_video_ctx->framerate.den > 0) {
+            metadata.fps = av_q2d(m_video_ctx->framerate);
+        } else {
+            metadata.fps = av_q2d(m_fmt_ctx->streams[m_video_stream_idx]->r_frame_rate);
+        }
     }
 }
 
@@ -992,18 +999,15 @@ void CAV_DECODER::decodeVideoLoop() {
                     break;
                 }
 
-                // 1. INIZIALIZZAZIONE PIGRA AL PRIMO FRAME EFFETTIVO
                 if (interlaced && !m_filter_graph) {
                     initDeinterlaceFilter(m_frame_hw);
                 }
 
-                // Calcolo PTS
                 double pts = (m_frame_hw->pts == AV_NOPTS_VALUE) ? 0.0 :
                     m_frame_hw->pts * av_q2d(m_fmt_ctx->streams[m_video_stream_idx]->time_base);
 
                 AVFrame* frameToQueue = nullptr;
 
-                // 2. ELABORAZIONE TRAMITE FILTRO (SE ATTIVO)
                 if (m_filter_graph) {
                     if (av_buffersrc_add_frame(m_buffer_src, m_frame_hw) >= 0) {
                         AVFrame* filtered = av_frame_alloc();
@@ -1016,9 +1020,7 @@ void CAV_DECODER::decodeVideoLoop() {
                     } else {
                         frameToQueue = av_frame_clone(m_frame_hw);
                     }
-                }
-                // 3. LOGICA STANDARD SENZA FILTRO
-                else {
+                } else {
                     if (m_frame_hw->format == AV_PIX_FMT_VULKAN) {
                         frameToQueue = av_frame_clone(m_frame_hw);
                     }
@@ -1038,7 +1040,6 @@ void CAV_DECODER::decodeVideoLoop() {
                     }
                 }
 
-                // 4. STRUTTURA UNIFICATA DI ACCUMULO NELLA CODA (Risolto bug di nidificazione dell'else)
                 if (frameToQueue) {
                     std::unique_lock<std::mutex> lock(m_frame_mutex);
                     m_frame_cv.wait(lock, [this] {
@@ -1235,7 +1236,7 @@ void CAV_DECODER::initDeinterlaceFilter(AVFrame* frame) {
     }
 
     char args[512];
-    // Se siamo in HW usiamo la yuv420p come civetta testuale, se siamo in SW usiamo il formato reale del frame
+
     AVPixelFormat initFmt = isHW ? AV_PIX_FMT_YUV420P : (AVPixelFormat)frame->format;
 
     snprintf(args, sizeof(args),
@@ -1287,7 +1288,6 @@ void CAV_DECODER::initDeinterlaceFilter(AVFrame* frame) {
         }
     }
 
-    // SELEZIONE DINAMICA DEL FILTRO
     const char* filter_descr = isHW ? "bwdif_vulkan" : "bwdif";
 
     AVFilterInOut* outputs = avfilter_inout_alloc();
@@ -1338,11 +1338,15 @@ Json::Value CAV_DECODER::getJsonStatus() {
     root["duration"] = metadata.duration;
     root["filename"] = m_currentfilename;
     root["video_codecName"] = metadata.video_codecName;
+    root["width"] = metadata.width;
+    root["height"] = metadata.height;
+    root["fps"] = metadata.fps;
     root["audio_codecName"] = metadata.audio_codecName;
     root["audio_sampleRate"] = metadata.audio_sampleRate;
     root["audio_bitrate"] = static_cast<Json::Value::Int64>(metadata.audio_bitrate);
     root["audio_channels"] = metadata.audio_channels;
     root["video_bitrate"] = static_cast<Json::Value::Int64>(metadata.video_bitrate);
     root["isResampling"] = true;
+    root["interlaced"] = interlaced;
     return root;
 }

@@ -33,6 +33,23 @@ type ColorParams = {
 };
 
 
+type filedecoder_data = {
+    audio_bitrate: number;
+    audio_channels: number;
+    audio_codecName: string;
+    audio_sampleRate: number;
+    duration: number;
+    filename: string;
+    fps: number;
+    height: number;
+    interlaced: boolean;
+    isPlaying: boolean;
+    isResampling: boolean;
+    position: number;
+    video_bitrate: number;
+    video_codecName: string;
+    width: number;
+}
 
 type NDI_INPUT ={
     running: boolean;
@@ -60,6 +77,7 @@ type MixerInput = {
     chromakey: ChromaKeyParams;
     lumakey : LumaKeyParams;
     color: ColorParams;
+    file_decoder: filedecoder_data;
     ndi: {
         sources: {
             name: string;
@@ -80,6 +98,23 @@ const defaultChroma: ChromaKeyParams = { v0: 0.0, v1: 1.0, v2: 0.0, threshold: 0
 const defaultColor: ColorParams = { brightness: 0.0, contrast: 1.0, saturation: 1.0, gamma: 1.0, hueShift: 0.0, blackLevel: 0.0, whiteLevel: 1.0, enabled: 0.0 };
 const defaultLuma: LumaKeyParams = { lower: 0.0,upper:0.0,invert:0.0,softness:0.0,enabled:0.0};
 const defaultNDI_INPUT: NDI_INPUT = {running: false,source:"",video:{width:0,height:0,fps:0,frameCount:0},audio:{sourceRate: 0,sourceCh:0,targetRate:0,targetCh:0,frameCount:0}};
+const defaultFileDecoder: filedecoder_data = {
+    audio_bitrate: 0,
+    audio_channels: 0,
+    audio_codecName: "",
+    audio_sampleRate: 0,
+    duration: 0,
+    filename: "",
+    fps: 0,
+    height: 0,
+    interlaced: false,
+    isPlaying: false,
+    isResampling: false,
+    position: 0,
+    video_bitrate: 0,
+    video_codecName: "",
+    width: 0,
+};
 const makeDefaultInput = (): MixerInput => ({
     alpha: 1, height: 0, width: 0, inUse: false, isVisible: true, layer: 0,
     pos_x: 0, pos_y: 0, scale_x: 1, scale_y: 1, type: -1,
@@ -87,6 +122,7 @@ const makeDefaultInput = (): MixerInput => ({
     chromakey: { ...defaultChroma },
     lumakey:{...defaultLuma },
     color: { ...defaultColor },
+    file_decoder: {...defaultFileDecoder },
     ndi :{status: defaultNDI_INPUT,sources:[]  }
 });
 
@@ -278,6 +314,9 @@ function SidebarItem({ idx, input, selected, onSelect, onContextMenu, onToggleVi
 
     // Estrazione sicura dei dati NDI
     const isNDI = input.type === 5;
+    const isAVPlayer = input.type === 2;
+    const avplayerStatus = input?.file_decoder;
+
     const ndiStatus = input?.ndi?.status;
 
     // Label principale: Nome della sorgente
@@ -328,6 +367,35 @@ function SidebarItem({ idx, input, selected, onSelect, onContextMenu, onToggleVi
                 </div>
             </div>
 
+            {isAVPlayer && avplayerStatus && (
+                <div>
+                    <div className="flex gap-2  px-1 py-0.5 bg-black/30 rounded text-[8px] text-slate-300 font-mono">
+                        <span className="text-blue-400">
+                            {avplayerStatus.width}x{avplayerStatus.height}
+                        </span>
+                        <span className="text-purple-400">
+                            {avplayerStatus.fps.toFixed(2)} FPS
+                        </span>
+                        <span className="text-purple-400">
+                            {avplayerStatus.interlaced ? "Interlaced" : "Progressive" }
+                        </span>
+
+                    </div>
+                    <div className="flex gap-2 mb-1.5 px-1 py-0.5 bg-black/30 rounded text-[8px] text-slate-300 font-mono">
+                        <span className="text-blue-400">
+                            {avplayerStatus.audio_sampleRate} Hz
+                        </span>
+                        <span className="text-purple-400">
+                            {avplayerStatus.audio_channels} ch
+                        </span>
+                        <span className="text-purple-400">
+                            {avplayerStatus.audio_bitrate} bps
+                        </span>
+
+                    </div>
+                </div>
+
+            )}
             {/* Area dettagli specifici NDI */}
             {isNDI && ndiStatus?.running && (
                 <div className="flex gap-2 mb-1.5 px-1 py-0.5 bg-black/30 rounded text-[8px] text-slate-300 font-mono">
@@ -456,7 +524,13 @@ export function VideoMixerDashboard() {
 
     const handleNDIRemove = (index: number) => sendMessage({ msgid: 9001, video_index: index });
 
-
+    const toggleBicubic = (index: number, active: boolean) => {
+        sendMessage({
+            msgid: 8020,
+            input_index: index,
+            active: active
+        });
+    };
 
     const openContextMenu = (e: React.MouseEvent, index: number) => {
         if (index === PROTECTED_INDEX) return;
@@ -756,6 +830,17 @@ export function VideoMixerDashboard() {
                                                 onChange={(e) => updateInput(selectedIndex, { keepaspect: e.target.checked })}
                                                 className="w-4 h-4 accent-emerald-500 cursor-pointer"
                                             />
+                                        </div>
+                                        <div className="flex items-center gap-3 px-4 bg-slate-800 rounded border border-slate-700">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase">Bicubic</span>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only peer"
+                                                    onChange={(e) => toggleBicubic(selectedIndex, e.target.checked)}
+                                                />
+                                                <div className="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4 peer-checked:after:bg-white"></div>
+                                            </label>
                                         </div>
                                     </div>
 

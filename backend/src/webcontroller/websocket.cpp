@@ -21,7 +21,6 @@ CWebSocket::CWebSocket() {
 			this->StartStatusTimer();
 		});
 
-		LOG_INFO << "Global Status Timer inizializzato correttamente";
 	});
 
 }

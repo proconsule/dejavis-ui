@@ -117,9 +117,9 @@ bool CAV_DECODER::InitFFmpegVulkanHW()
     auto addQF = [&](uint32_t idx, int num, VkQueueFlagBits flags,
                      VkVideoCodecOperationFlagBitsKHR vcaps)
     {
-        if (idx == UINT32_MAX || n >= 64) return;
+        if (idx == std::numeric_limits<uint32_t>::max() || n >= 64) return;
         vkCtx->qf[n].idx        = (int)idx;
-        vkCtx->qf[n].num        = num;          // tu crei 1 queue per family
+        vkCtx->qf[n].num        = num;          // 1 queue per family
         vkCtx->qf[n].flags      = flags;
         vkCtx->qf[n].video_caps = vcaps;
         ++n;

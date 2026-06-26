@@ -23,9 +23,7 @@ void destroyMappedBuffer(VulkanContext* ctx,
                          VkDeviceMemory& memory,
                          void**          mapped);
 
-// Trova un memory type compatibile con typeFilter e con le properties richieste.
-// Ritorna UINT32_MAX se nessuno e' compatibile.
-uint32_t findMemoryType(VulkanContext* ctx, uint32_t typeFilter,
+    uint32_t findMemoryType(VulkanContext* ctx, uint32_t typeFilter,
                         VkMemoryPropertyFlags properties);
 
 // Pipeline barrier su una singola immagine.

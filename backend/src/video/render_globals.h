@@ -211,10 +211,10 @@ struct VulkanContext {
     VkDevice device{VK_NULL_HANDLE};
 
     // Queue families
-    uint32_t graphicsQueueFamily{UINT32_MAX};
-    uint32_t computeQueueFamily{UINT32_MAX};
-    uint32_t transferQueueFamily{UINT32_MAX};
-    uint32_t decodeQueueFamily{UINT32_MAX};
+    uint32_t graphicsQueueFamily{std::numeric_limits<uint32_t>::max()};
+    uint32_t computeQueueFamily{std::numeric_limits<uint32_t>::max()};
+    uint32_t transferQueueFamily{std::numeric_limits<uint32_t>::max()};
+    uint32_t decodeQueueFamily{std::numeric_limits<uint32_t>::max()};
 
     std::vector<QueueFamilyDesc> queueFamilies; // popolato dedupplicato al device-creation time
 
@@ -231,7 +231,7 @@ struct VulkanContext {
     VkCommandPool transferCommandPool{VK_NULL_HANDLE};
     VkCommandPool decodeCommandPool{VK_NULL_HANDLE};
 
-    uint32_t   encodeQueueFamily { UINT32_MAX };
+    uint32_t   encodeQueueFamily { std::numeric_limits<uint32_t>::max() };
     VkQueue    encodeQueue       { VK_NULL_HANDLE };
 
     VkCommandBuffer master_commandBuffers;
@@ -261,7 +261,6 @@ struct VulkanContext {
     std::array<std::mutex, 32> _queueMutexByFamily;
 
     std::mutex& queueMutex(uint32_t family) {
-        // family == UINT32_MAX (queue assente) -> slot 0, innocuo.
         return _queueMutexByFamily[(family < 32u) ? family : 0u];
     }
 

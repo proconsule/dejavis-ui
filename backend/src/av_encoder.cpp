@@ -128,7 +128,7 @@ bool CAV_ENCODER::InitVulkanEncoderHW()
     auto addQF = [&](uint32_t idx, int num, VkQueueFlagBits flags,
                      VkVideoCodecOperationFlagBitsKHR vcaps)
     {
-        if (idx == UINT32_MAX || n >= 64) return;
+        if (idx == std::numeric_limits<uint32_t>::max() || n >= 64) return;
         vkCtx->qf[n].idx        = (int)idx;
         vkCtx->qf[n].num        = num;
         vkCtx->qf[n].flags      = flags;
@@ -439,7 +439,7 @@ bool CAV_ENCODER::TryVideoEncoder(std::string name,int width, int height, int bi
 
     const std::string nm = name;
     if (nm == "h264_vulkan") {
-        if (m_ctx->encodeQueueFamily == UINT32_MAX || !m_hw_device_ref) {
+        if (m_ctx->encodeQueueFamily == std::numeric_limits<uint32_t>::max() || !m_hw_device_ref) {
             avcodec_free_context(&ctx); return false;   // nessun encode Vulkan
         }
         if (!InitFramesContext(width, height)) { avcodec_free_context(&ctx); return false; }

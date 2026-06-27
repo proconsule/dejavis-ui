@@ -54,7 +54,6 @@ static int audioOutputCallback(const void *inputBuffer, void *outputBuffer,
     if (outputBuffer != nullptr) {
         AudioMixerOutputItem * mixer_output_item = (AudioMixerOutputItem *)userData;
         float* out = static_cast<float*>(outputBuffer);
-
         if (mixer_output_item->buffer->getAvailableRead() >= framesPerBuffer * mixer_output_item->channels) {
             mixer_output_item->buffer->read(out, framesPerBuffer * mixer_output_item->channels);
         } else {
@@ -385,11 +384,10 @@ void CAudio::startProcessing() {
 
 void CAudio::processMasterOutSamples(std::vector<float>& _block, bool* _dataprocessed) {
 
-    ZoneScopedN("processMasterOutSamples");
     MultiChannelRingBuffer* InputMasterMixed = AUDIO_MIXER.getMasterProcessBuffer();
 
     const size_t channels = 2;
-    const size_t frames   = _block.size() / channels;  // _block è dimensionato in sample interleaved
+    const size_t frames   = _block.size() ;
 
     if (InputMasterMixed->getAvailableRead() < frames) return;
 

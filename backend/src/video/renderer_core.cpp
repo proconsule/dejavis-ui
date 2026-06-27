@@ -274,11 +274,11 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     std::vector<VkQueueFamilyProperties> qProps(qCount);
     vkGetPhysicalDeviceQueueFamilyProperties(m_ctx.physicalDevice, &qCount, qProps.data());
 
-    m_ctx.graphicsQueueFamily = UINT32_MAX;
-    m_ctx.computeQueueFamily  = UINT32_MAX;
-    m_ctx.transferQueueFamily = UINT32_MAX;
-    m_ctx.decodeQueueFamily   = UINT32_MAX;
-    m_ctx.encodeQueueFamily   = UINT32_MAX;
+    m_ctx.graphicsQueueFamily = std::numeric_limits<uint32_t>::max();
+    m_ctx.computeQueueFamily  = std::numeric_limits<uint32_t>::max();
+    m_ctx.transferQueueFamily = std::numeric_limits<uint32_t>::max();
+    m_ctx.decodeQueueFamily   = std::numeric_limits<uint32_t>::max();
+    m_ctx.encodeQueueFamily   = std::numeric_limits<uint32_t>::max();
 
     for (uint32_t i = 0; i < qCount; i++) {
         VkQueueFlags flags = qProps[i].queueFlags;
@@ -1061,4 +1061,104 @@ void CRenderer::InitRGB2YUV() {
             slot, core_w, core_h, fmt,
             m_master_per_frame[0].image.view);
     }
+}
+
+
+static void ff_vk_lock_queue(AVHWDeviceContext* c, uint32_t qf, uint32_t){
+    static_cast<VulkanContext*>(c->user_opaque)->queueMutex(qf).lock();
+}
+
+static void ff_vk_unlock_queue(AVHWDeviceContext* c, uint32_t qf, uint32_t){
+    static_cast<VulkanContext*>(c->user_opaque)->queueMutex(qf).unlock();
+}
+
+AVBufferRef* CRenderer::CreateFFmpegVulkanHWContext()
+{
+    if (m_ctx.device == VK_NULL_HANDLE) return nullptr;
+
+    AVBufferRef* hw_device_ctx = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VULKAN);
+    if (!hw_device_ctx) return nullptr;
+
+    AVHWDeviceContext* devCtx = reinterpret_cast<AVHWDeviceContext*>(hw_device_ctx->data);
+    AVVulkanDeviceContext* vkCtx  = reinterpret_cast<AVVulkanDeviceContext*>(devCtx->hwctx);
+
+    devCtx->user_opaque = &m_ctx;
+    vkCtx->get_proc_addr = vkGetInstanceProcAddr;
+    vkCtx->inst          = m_ctx.instance;
+    vkCtx->phys_dev      = m_ctx.physicalDevice;
+    vkCtx->act_dev       = m_ctx.device;
+    vkCtx->device_features = m_ctx.deviceFeatures2;
+
+    vkCtx->enabled_inst_extensions    = nullptr;
+    vkCtx->nb_enabled_inst_extensions = 0;
+    vkCtx->enabled_dev_extensions     = m_ctx.devExt.data();
+    vkCtx->nb_enabled_dev_extensions  = (int)m_ctx.devExt.size();
+
+    #if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 34, 100)
+    int n = 0;
+    auto addQF = [&](uint32_t idx, int num, VkQueueFlagBits flags,
+                     VkVideoCodecOperationFlagBitsKHR vcaps)
+    {
+        if (idx == std::numeric_limits<uint32_t>::max() || n >= 64) return;
+        vkCtx->qf[n].idx        = (int)idx;
+        vkCtx->qf[n].num        = num;          // 1 queue per family
+        vkCtx->qf[n].flags      = flags;
+        vkCtx->qf[n].video_caps = vcaps;
+        ++n;
+    };
+
+
+    addQF(m_ctx.graphicsQueueFamily, 1, VK_QUEUE_GRAPHICS_BIT,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+    addQF(m_ctx.computeQueueFamily,  1, VK_QUEUE_COMPUTE_BIT,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+    addQF(m_ctx.transferQueueFamily, 1, VK_QUEUE_TRANSFER_BIT,
+          (VkVideoCodecOperationFlagBitsKHR)0);
+    addQF(m_ctx.decodeQueueFamily,   1, VK_QUEUE_VIDEO_DECODE_BIT_KHR,
+          (VkVideoCodecOperationFlagBitsKHR)(
+              VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR |
+              VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR|VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR));
+    addQF(m_ctx.encodeQueueFamily,   1, VK_QUEUE_VIDEO_ENCODE_BIT_KHR,
+          (VkVideoCodecOperationFlagBitsKHR)(
+              VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR |
+              VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR));
+    vkCtx->nb_qf = n;
+
+    // --- Campi deprecati: la struct e' zero-init, ma 0 e' un indice VALIDO,
+    //     quindi su versioni transitorie va riempito esplicitamente per non far
+    //     credere a FFmpeg che la family 0 sia tx/comp/decode.
+#else
+    vkCtx->queue_family_index        = (int)m_ctx.graphicsQueueFamily; vkCtx->nb_graphics_queues = 1;
+    vkCtx->queue_family_tx_index     = (int)m_ctx.transferQueueFamily; vkCtx->nb_tx_queues       = 1;
+    vkCtx->queue_family_comp_index   = (int)m_ctx.computeQueueFamily;  vkCtx->nb_comp_queues     = 1;
+    vkCtx->queue_family_decode_index = -1;
+    vkCtx->nb_decode_queues   = 0;
+    if (m_ctx->decodeQueueFamily != std::numeric_limits<uint32_t>::max()) {
+        vkCtx->queue_family_decode_index = (int)m_ctx.decodeQueueFamily;
+        vkCtx->nb_decode_queues          = 1;
+    } else {
+        vkCtx->queue_family_decode_index = -1;
+        vkCtx->nb_decode_queues          = 0;
+    }
+    if (m_ctx->encodeQueueFamily != std::numeric_limits<uint32_t>::max()) {
+        vkCtx->queue_family_encode_index = (int)m_ctx.encodeQueueFamily;
+        vkCtx->nb_encode_queues          = 1;
+    } else {
+        vkCtx->queue_family_encode_index = -1;
+        vkCtx->nb_encode_queues          = 0;
+    }
+
+    vkCtx->lock_queue   = ff_vk_lock_queue;
+    vkCtx->unlock_queue = ff_vk_unlock_queue;
+
+#endif
+
+
+
+    if (av_hwdevice_ctx_init(hw_device_ctx) < 0) {
+        av_buffer_unref(&hw_device_ctx);
+        return nullptr;
+    }
+
+    return hw_device_ctx; // Restituisce il riferimento pronto
 }

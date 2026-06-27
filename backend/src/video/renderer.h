@@ -82,7 +82,7 @@ struct Vulkan_ShaderCompileResult {
 struct videomixeritem {
     float pos_x = 0.0f, pos_y = 0.0f, scale_x = 1.0f, scale_y = 1.0f, alpha = 1.0f;
     bool y_flip = false;
-	bool useLanczos = false;
+	bool useBicubic = false;
     bool inUse = false;
 	bool isVisible = false;
     int type = -1;
@@ -210,7 +210,11 @@ public:
 	void CleanRGB2YUV();
 	void InitRGB2YUV();
 
-    bool Init_GLFW_Window(uint32_t _w, uint32_t _h);
+	AVBufferRef *CreateFFmpegVulkanHWContext();
+
+	AVBufferRef * ffmpeg_vk_ctx = nullptr;
+
+	bool Init_GLFW_Window(uint32_t _w, uint32_t _h);
     void GLFW_Vulkan_Submit(VkCommandBuffer cmd, uint32_t imageIndex, uint32_t syncIndex);
     void SetFullScreen(bool _val,bool _reschange = false);
     int win_pos_x = 0;

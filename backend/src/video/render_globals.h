@@ -308,13 +308,8 @@ struct VulkanTexture {
 
 struct MasterResources {
     VulkanTexture image;
-    //VkImage image = VK_NULL_HANDLE;
-    //VkDeviceMemory memory = VK_NULL_HANDLE;
-    //VkImageView view = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     VkRenderPass renderPass = VK_NULL_HANDLE;
-    //uint32_t width = 1920;
-    //uint32_t height = 1080;
 };
 
 struct VulkanUniTexture{
@@ -353,10 +348,8 @@ struct SharedInteropResources {
 
 #ifdef _WIN32
     HANDLE sharedMemoryHandle = NULL;
-   // HANDLE sharedSemaphoreHandle = NULL;
 #else
     int sharedMemoryFd = -1;
-    //int sharedSemaphoreFd = -1;
 #endif
 
 #ifdef __APPLE__
@@ -376,7 +369,6 @@ struct SharedInteropResources {
     uint32_t height = 1080;
     VkDeviceSize allocationSize = 0;
     VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-   // VideoMixerProp VideoMixer;
 
 };
 
@@ -409,18 +401,8 @@ struct YUVPushConstants {
     uint32_t padding = 0; // Inizializzato a 0
 };
 
-
-enum class DecoderPath {
-    SOFTWARE, // RAM -> Buffer -> (opzionale) Texture
-    HARDWARE  // GPU Zero-Copy (DRM/VAAPI/D3D11)
-};
-
 struct YUVComputeResources {
 
-    DecoderPath useHardwarePath = DecoderPath::SOFTWARE;
-
-    //VkPipelineLayout m_yuvtorgbComputePipelineLayout;
-    //VkPipeline m_yuvtorgbComputePipeline;
     VkDescriptorSet m_yuvToRgbaDescriptorSet;
     VkDescriptorPool m_yuvToRgbaDescriptorPool;
 

@@ -84,7 +84,7 @@ public:
 
     bool ensureYUVSlotForFrame(AVFrame *f);
 
-    bool InitFFmpegVulkanHW();
+    bool InitFFmpegVulkanHW(AVBufferRef* shared_hw_ctx);
 
     void LoadFileAsync(const std::string& _path);
 

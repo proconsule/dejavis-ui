@@ -8,7 +8,7 @@ layout(push_constant) uniform LayerLayout {
     vec2 scale;
     float alpha;
     int yFlip;
-    int useLanczos;
+    int useBicubic;
 } push;
 
 layout(location = 0) out vec2 fragTexCoord;
@@ -51,7 +51,7 @@ layout(push_constant) uniform LayerLayout {
     vec2 scale;
     float alpha;
     int yFlip;
-    int useLanczos;
+    int useBicubic;
 } push;
 
 float cubic(float x) {
@@ -66,7 +66,7 @@ float cubic(float x) {
 }
 
 void main() {
-    if (push.useLanczos == 0) {
+    if (push.useBicubic == 0) {
         vec4 texColor = texture(texSampler, fragTexCoord);
         outColor = vec4(texColor.rgb, texColor.a * fragAlpha);
         return;
@@ -112,7 +112,7 @@ struct LayerLayout {
     float scale[2];
     float alpha;
     int yFlip;         // 1 per attivare il flip, 0 altrimenti
-    int useLanzcos;
+    int useBicubic;
     float padding;
 };
 
@@ -160,7 +160,7 @@ bool CRenderer::initVideoMixer() {
 
     // 3. PIPELINE LAYOUT (Push Constants)
     VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(LayerLayout); // Assicurati che LayerLayout sia definita (2 float pos, 2 float scale)
 
@@ -168,7 +168,7 @@ bool CRenderer::initVideoMixer() {
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &m_ctx.m_mixerDescriptorLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange; // <--- Corretto: pPushConstantRanges
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(m_ctx.device, &pipelineLayoutInfo, nullptr, &m_mixerPipelineLayout) != VK_SUCCESS) {
         DEJAVISUI_LOG_ERROR("Errore creazione PipelineLayout Mixer");
@@ -383,7 +383,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
 
         }
     }else if (usedecoderimage) {
@@ -405,7 +405,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
         }
     } else if (usendi) {
         if (_mixerprop->ndi_receiver->getOutputWidth() > 0) {
@@ -424,7 +424,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                            _mixerprop->pos_x, _mixerprop->pos_y,
                            finalScaleX, finalScaleY,
-                           _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
+                           _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
         }
     } else if (useurldecoderimage) {
         if (_mixerprop->AV_STREAM_DECODER->getOutputWidth() > 0) {
@@ -436,7 +436,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, _mixerprop->AV_STREAM_DECODER->getMixerDescriptorSet(),
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
         }
     } else if (useimageviewverimage) {
         if (_mixerprop->img_viewver->getOutputWidth() > 0) {
@@ -448,14 +448,14 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
             drawVideoLayer(cmd, ds,
                        _mixerprop->pos_x, _mixerprop->pos_y,
                        finalScaleX, finalScaleY,
-                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useLanczos);
+                       _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
         }
     }
 }
 
 void CRenderer::drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
                                float x, float y, float scaleX, float scaleY,
-                               float alpha, bool yFlip,bool useLanzcos) {
+                               float alpha, bool yFlip,bool useBicubic) {
     if (m_mixerPipeline == VK_NULL_HANDLE || textureSet == VK_NULL_HANDLE) return;
 
     // Push Constants
@@ -466,7 +466,7 @@ void CRenderer::drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
     push.scale[1]    = scaleY;
     push.alpha       = alpha;
     push.yFlip       = yFlip ? 1 : 0;
-    push.useLanzcos   = useLanzcos ? 1 : 0;
+    push.useBicubic   = useBicubic ? 1 : 0;
 
     vkCmdPushConstants(cmd, m_mixerPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(LayerLayout), &push);
 
@@ -685,7 +685,7 @@ int CRenderer::AddVideoFilePlayerToMixer(std::string _path,int _audio_mixer_id) 
     videoMixerTextures[slot].AV_DECODER = new CAV_DECODER();
     videoMixerTextures[slot].AV_DECODER->SetFileBroswerBasePath(_path);
     videoMixerTextures[slot].AV_DECODER->InitDecoder(&m_ctx,m_audio->AUDIO_MIXER.getMixerInputItem(_audio_mixer_id)->buffer_planar.get(),48000,2);
-    videoMixerTextures[slot].AV_DECODER->InitFFmpegVulkanHW();
+    videoMixerTextures[slot].AV_DECODER->InitFFmpegVulkanHW(ffmpeg_vk_ctx);
     //videoMixerTextures[slot].AV_DECODER->m_yuvcompute = &videoComputes[slot];
     //videoMixerTextures[slot].AV_DECODER->m_vulkan_texture = &videoTextures[slot];
 

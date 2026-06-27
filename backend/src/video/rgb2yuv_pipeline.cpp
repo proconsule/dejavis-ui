@@ -7,13 +7,7 @@
 
 #include "vulkan_utils.h"
 
-// =============================================================================
-//  Shader sorgente NV12
-//  Una invocation copre un blocco 2x2 pixel per scrivere un solo campione UV.
-//  Ogni invocation calcola 4 sample Y e 1 sample UV mediato sul 2x2.
-//  local size = 16x16 (in pixel), quindi gx = (w+15)/16 / 2 -> usiamo (w+1)/2
-//  Per semplicita' uso local_size 8x8 (in blocchi 2x2 = 16x16 pixel).
-// =============================================================================
+
 static const char* rgb2yuv_nv12_glsl = R"(#version 450
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
@@ -21,115 +15,81 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(binding = 0, rgba8) uniform readonly image2D inImage;
 layout(std430, binding = 1) writeonly buffer YBuf  { uint dataY[];  };
 layout(std430, binding = 2) writeonly buffer UVBuf { uint dataUV[]; };
-// binding 3 (V) presente nel descriptor ma non scritto in NV12
 
 layout(push_constant) uniform PC {
     int strideY;
-    int strideU;    // stride UV in NV12
-    int strideV;    // unused
+    int strideU;
+    int strideV;
     int rangeFull;
     int width;
     int height;
-    int padding0;
-    int padding1;
 } pc;
 
 vec3 sampleRGB(int x, int y) {
-    x = clamp(x, 0, pc.width  - 1);
-    y = clamp(y, 0, pc.height - 1);
-    return imageLoad(inImage, ivec2(x, y)).rgb;
+    return imageLoad(inImage, ivec2(clamp(x, 0, pc.width - 1), clamp(y, 0, pc.height - 1))).rgb;
 }
 
-// Atomicamente scrive un byte in un buffer di uint usando bitwise ops.
-// Ogni invocation aggiorna solo i propri byte, mai con altre — quindi non
-// servirebbe atomic se le invocation non si sovrappongono. In pratica ogni
-// invocation scrive 4 byte di Y (4 sample distinti) e 2 byte di UV: tutti
-// in posizioni esclusive. Possiamo fare un read-modify-write non atomico
-// solo se le scritture concomitanti su byte diversi della stessa uint sono
-// safe... NO, non lo sono in GLSL su buffer. Usiamo atomicAnd/atomicOr.
-
-void writeByte(int byteIdx, uint val, bool isUV) {
-    int wordIdx = byteIdx >> 2;
-    int shift   = (byteIdx & 3) * 8;
-    uint clearMask = ~(0xFFu << shift);
-    uint setMask   = (val & 0xFFu) << shift;
-    if (isUV) {
-        atomicAnd(dataUV[wordIdx], clearMask);
-        atomicOr (dataUV[wordIdx], setMask);
-    } else {
-        atomicAnd(dataY[wordIdx], clearMask);
-        atomicOr (dataY[wordIdx], setMask);
-    }
-}
-
-float clamp01(float v) { return clamp(v, 0.0, 1.0); }
-
-void rgbToYUV(vec3 rgb, out float Y, out float U, out float V) {
-    // BT.601
+uint rgbToY(vec3 rgb) {
     float y = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+    return (pc.rangeFull == 1) ? uint(clamp(y, 0.0, 1.0) * 255.0 + 0.5)
+                               : uint(16.0 + clamp(y, 0.0, 1.0) * 219.0 + 0.5);
+}
+
+vec2 rgbToUV(vec3 rgb) {
     float u = -0.168736 * rgb.r - 0.331264 * rgb.g + 0.5 * rgb.b;
     float v = 0.5 * rgb.r - 0.418688 * rgb.g - 0.081312 * rgb.b;
-
     if (pc.rangeFull == 1) {
-        Y = clamp01(y) * 255.0;
-        U = clamp(u + 0.5, 0.0, 1.0) * 255.0;
-        V = clamp(v + 0.5, 0.0, 1.0) * 255.0;
+        return vec2(clamp(u + 0.5, 0.0, 1.0) * 255.0, clamp(v + 0.5, 0.0, 1.0) * 255.0);
     } else {
-        // BT.601 limited: Y in [16, 235], UV in [16, 240]
-        Y = 16.0  + clamp01(y) * 219.0;
-        U = 128.0 + clamp(u, -0.5, 0.5) * 224.0;
-        V = 128.0 + clamp(v, -0.5, 0.5) * 224.0;
+        return vec2(128.0 + clamp(u, -0.5, 0.5) * 224.0, 128.0 + clamp(v, -0.5, 0.5) * 224.0);
     }
 }
 
 void main() {
-    ivec2 block = ivec2(gl_GlobalInvocationID.xy); // blocco 2x2
-    int bx2 = block.x * 2;
-    int by2 = block.y * 2;
-    if (bx2 >= pc.width || by2 >= pc.height) return;
+    int gX = int(gl_GlobalInvocationID.x) * 4;
+    int gY = int(gl_GlobalInvocationID.y) * 2;
 
-    // 4 sample RGB del blocco
-    vec3 rgb00 = sampleRGB(bx2,     by2);
-    vec3 rgb10 = sampleRGB(bx2 + 1, by2);
-    vec3 rgb01 = sampleRGB(bx2,     by2 + 1);
-    vec3 rgb11 = sampleRGB(bx2 + 1, by2 + 1);
+    if (gX >= pc.width || gY >= pc.height) return;
 
-    float Y00, U00, V00;
-    float Y10, U10, V10;
-    float Y01, U01, V01;
-    float Y11, U11, V11;
-    rgbToYUV(rgb00, Y00, U00, V00);
-    rgbToYUV(rgb10, Y10, U10, V10);
-    rgbToYUV(rgb01, Y01, U01, V01);
-    rgbToYUV(rgb11, Y11, U11, V11);
+    vec3 c0 = sampleRGB(gX,     gY);
+    vec3 c1 = sampleRGB(gX + 1, gY);
+    vec3 c2 = sampleRGB(gX + 2, gY);
+    vec3 c3 = sampleRGB(gX + 3, gY);
 
-    // Y: 4 byte distinti
-    writeByte(by2     * pc.strideY + bx2,     uint(Y00 + 0.5), false);
-    if (bx2 + 1 < pc.width)
-        writeByte(by2     * pc.strideY + bx2 + 1, uint(Y10 + 0.5), false);
-    if (by2 + 1 < pc.height) {
-        writeByte((by2+1) * pc.strideY + bx2,     uint(Y01 + 0.5), false);
-        if (bx2 + 1 < pc.width)
-            writeByte((by2+1) * pc.strideY + bx2 + 1, uint(Y11 + 0.5), false);
-    }
+    vec3 b0 = sampleRGB(gX,     gY + 1);
+    vec3 b1 = sampleRGB(gX + 1, gY + 1);
+    vec3 b2 = sampleRGB(gX + 2, gY + 1);
+    vec3 b3 = sampleRGB(gX + 3, gY + 1);
 
-    // UV: media dei 4 chroma, 1 sample
-    float U = (U00 + U10 + U01 + U11) * 0.25;
-    float V = (V00 + V10 + V01 + V11) * 0.25;
+    uint packedY0 = rgbToY(c0) | (rgbToY(c1) << 8) | (rgbToY(c2) << 16) | (rgbToY(c3) << 24);
+    uint packedY1 = rgbToY(b0) | (rgbToY(b1) << 8) | (rgbToY(b2) << 16) | (rgbToY(b3) << 24);
 
-    // NV12: UV interleaved, riga = block.y, byte index = block.x * 2
-    int uvBase = block.y * pc.strideU + block.x * 2;
-    writeByte(uvBase,     uint(U + 0.5), true);
-    writeByte(uvBase + 1, uint(V + 0.5), true);
+    dataY[(gY * pc.strideY + gX) / 4] = packedY0;
+    dataY[((gY + 1) * pc.strideY + gX) / 4] = packedY1;
+
+    vec2 uv01 = (rgbToUV(c0) + rgbToUV(c1) + rgbToUV(b0) + rgbToUV(b1)) * 0.25;
+    vec2 uv23 = (rgbToUV(c2) + rgbToUV(c3) + rgbToUV(b2) + rgbToUV(b3)) * 0.25;
+
+    uint u0 = uint(uv01.x + 0.5); uint v0 = uint(uv01.y + 0.5);
+    uint u1 = uint(uv23.x + 0.5); uint v1 = uint(uv23.y + 0.5);
+
+    uint packedUV = u0 | (v0 << 8) | (u1 << 16) | (v1 << 24);
+
+    // --- CORREZIONE QUI: gX senza il * 2 ---
+    dataUV[((gY / 2) * pc.strideU + gX) / 4] = packedUV;
 }
 )";
 
 // =============================================================================
-//  Shader sorgente YUV420P (3 piani separati Y, U, V)
+//  Shader YUV420P (Definitivo - Allineato a 8x2 Pixel per Thread)
 // =============================================================================
 static const char* rgb2yuv_yuv420p_glsl = R"(#version 450
 
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+// Per il formato planare puro, modifichiamo il local_size a 4x8 in modo che ciascun thread
+// possa processare ben 8 pixel in larghezza. Questo consente a OGNI thread di produrre
+// autonomamente 4 campioni di Chroma (U e V), scrivendo una uint completa (4 byte)
+// su ciascun piano senza mai sovrapporsi o usare atomici!
+layout(local_size_x = 4, local_size_y = 8, local_size_z = 1) in;
 
 layout(binding = 0, rgba8) uniform readonly image2D inImage;
 layout(std430, binding = 1) writeonly buffer YBuf { uint dataY[]; };
@@ -143,77 +103,73 @@ layout(push_constant) uniform PC {
     int rangeFull;
     int width;
     int height;
-    int padding0;
-    int padding1;
 } pc;
 
 vec3 sampleRGB(int x, int y) {
-    x = clamp(x, 0, pc.width  - 1);
-    y = clamp(y, 0, pc.height - 1);
-    return imageLoad(inImage, ivec2(x, y)).rgb;
+    return imageLoad(inImage, ivec2(clamp(x, 0, pc.width - 1), clamp(y, 0, pc.height - 1))).rgb;
 }
 
-#define WRITE_BYTE(BUF, BIDX, VAL)                              \
-    {                                                            \
-        int _wi = (BIDX) >> 2;                                   \
-        int _sh = ((BIDX) & 3) * 8;                              \
-        uint _cm = ~(0xFFu << _sh);                              \
-        uint _sm = ((VAL) & 0xFFu) << _sh;                       \
-        atomicAnd(BUF[_wi], _cm);                                \
-        atomicOr (BUF[_wi], _sm);                                \
-    }
-
-float clamp01(float v) { return clamp(v, 0.0, 1.0); }
-
-void rgbToYUV(vec3 rgb, out float Y, out float U, out float V) {
+uint rgbToY(vec3 rgb) {
     float y = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+    return (pc.rangeFull == 1) ? uint(clamp(y, 0.0, 1.0) * 255.0 + 0.5)
+                               : uint(16.0 + clamp(y, 0.0, 1.0) * 219.0 + 0.5);
+}
+
+vec2 rgbToUV(vec3 rgb) {
     float u = -0.168736 * rgb.r - 0.331264 * rgb.g + 0.5 * rgb.b;
     float v = 0.5 * rgb.r - 0.418688 * rgb.g - 0.081312 * rgb.b;
-
     if (pc.rangeFull == 1) {
-        Y = clamp01(y) * 255.0;
-        U = clamp(u + 0.5, 0.0, 1.0) * 255.0;
-        V = clamp(v + 0.5, 0.0, 1.0) * 255.0;
+        return vec2(clamp(u + 0.5, 0.0, 1.0) * 255.0, clamp(v + 0.5, 0.0, 1.0) * 255.0);
     } else {
-        Y = 16.0  + clamp01(y) * 219.0;
-        U = 128.0 + clamp(u, -0.5, 0.5) * 224.0;
-        V = 128.0 + clamp(v, -0.5, 0.5) * 224.0;
+        return vec2(128.0 + clamp(u, -0.5, 0.5) * 224.0, 128.0 + clamp(v, -0.5, 0.5) * 224.0);
     }
 }
 
 void main() {
-    ivec2 block = ivec2(gl_GlobalInvocationID.xy);
-    int bx2 = block.x * 2;
-    int by2 = block.y * 2;
-    if (bx2 >= pc.width || by2 >= pc.height) return;
+    int gX = int(gl_GlobalInvocationID.x) * 8; // 8 pixel in larghezza
+    int gY = int(gl_GlobalInvocationID.y) * 2; // 2 pixel in altezza
 
-    vec3 rgb00 = sampleRGB(bx2,     by2);
-    vec3 rgb10 = sampleRGB(bx2 + 1, by2);
-    vec3 rgb01 = sampleRGB(bx2,     by2 + 1);
-    vec3 rgb11 = sampleRGB(bx2 + 1, by2 + 1);
+    if (gX >= pc.width || gY >= pc.height) return;
 
-    float Y00, U00, V00, Y10, U10, V10, Y01, U01, V01, Y11, U11, V11;
-    rgbToYUV(rgb00, Y00, U00, V00);
-    rgbToYUV(rgb10, Y10, U10, V10);
-    rgbToYUV(rgb01, Y01, U01, V01);
-    rgbToYUV(rgb11, Y11, U11, V11);
-
-    WRITE_BYTE(dataY, by2 * pc.strideY + bx2, uint(Y00 + 0.5))
-    if (bx2 + 1 < pc.width)
-        WRITE_BYTE(dataY, by2 * pc.strideY + bx2 + 1, uint(Y10 + 0.5))
-    if (by2 + 1 < pc.height) {
-        WRITE_BYTE(dataY, (by2+1) * pc.strideY + bx2, uint(Y01 + 0.5))
-        if (bx2 + 1 < pc.width)
-            WRITE_BYTE(dataY, (by2+1) * pc.strideY + bx2 + 1, uint(Y11 + 0.5))
+    // Carichiamo gli 8 pixel della riga superiore (gY) e gli 8 della riga inferiore (gY+1)
+    vec3 c[8]; vec3 b[8];
+    for(int i = 0; i < 8; i++) {
+        c[i] = sampleRGB(gX + i, gY);
+        b[i] = sampleRGB(gX + i, gY + 1);
     }
 
-    float U = (U00 + U10 + U01 + U11) * 0.25;
-    float V = (V00 + V10 + V01 + V11) * 0.25;
+    // 1. Scrittura del Piano Y (2 uint da 4 byte per ciascuna riga)
+    uint y0_part1 = rgbToY(c[0]) | (rgbToY(c[1]) << 8) | (rgbToY(c[2]) << 16) | (rgbToY(c[3]) << 24);
+    uint y0_part2 = rgbToY(c[4]) | (rgbToY(c[5]) << 8) | (rgbToY(c[6]) << 16) | (rgbToY(c[7]) << 24);
 
-    int uIdx = block.y * pc.strideU + block.x;
-    int vIdx = block.y * pc.strideV + block.x;
-    WRITE_BYTE(dataU, uIdx, uint(U + 0.5))
-    WRITE_BYTE(dataV, vIdx, uint(V + 0.5))
+    uint y1_part1 = rgbToY(b[0]) | (rgbToY(b[1]) << 8) | (rgbToY(b[2]) << 16) | (rgbToY(b[3]) << 24);
+    uint y1_part2 = rgbToY(b[4]) | (rgbToY(b[5]) << 8) | (rgbToY(b[6]) << 16) | (rgbToY(b[7]) << 24);
+
+    int baseIdxY0 = (gY * pc.strideY + gX) / 4;
+    dataY[baseIdxY0]     = y0_part1;
+    dataY[baseIdxY0 + 1] = y0_part2;
+
+    int baseIdxY1 = ((gY + 1) * pc.strideY + gX) / 4;
+    dataY[baseIdxY1]     = y1_part1;
+    dataY[baseIdxY1 + 1] = y1_part2;
+
+    // 2. Calcolo dei 4 campioni Chroma mediati (per le 4 coppie 2x2 contenute negli 8 pixel)
+    uint u[4]; uint v[4];
+    for(int i = 0; i < 4; i++) {
+        vec2 uv = (rgbToUV(c[i*2]) + rgbToUV(c[i*2+1]) + rgbToUV(b[i*2]) + rgbToUV(b[i*2+1])) * 0.25;
+        u[i] = uint(uv.x + 0.5);
+        v[i] = uint(uv.y + 0.5);
+    }
+
+    // Impacchettamento dei 4 campioni in singole uint da 32 bit
+    uint packedU = u[0] | (u[1] << 8) | (u[2] << 16) | (u[3] << 24);
+    uint packedV = v[0] | (v[1] << 8) | (v[2] << 16) | (v[3] << 24);
+
+    // Scrittura diretta e atomica-free sui piani U e V separati
+    int chromaX = gX / 2;
+    int chromaY = gY / 2;
+    dataU[(chromaY * pc.strideU + chromaX) / 4] = packedU;
+    dataV[(chromaY * pc.strideV + chromaX) / 4] = packedV;
 }
 )";
 
@@ -658,23 +614,17 @@ void RGB2YUVPipeline::recordDispatch(VkCommandBuffer cmd, RGB2YUVSlotResources& 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
                             m_pipelineLayout, 0, 1, &slot.computeDescriptorSet, 0, nullptr);
 
-    // Lo shader lavora a blocchi 2x2 pixel (1 invocation = 1 blocco), local size 8x8.
-    // gx*gy invocations = (w/2)*(h/2), arrotondate per eccesso.
-    uint32_t blocksX = (slot.width  + 1) / 2;
-    uint32_t blocksY = (slot.height + 1) / 2;
-    uint32_t gx = (blocksX + 7) / 8;
-    uint32_t gy = (blocksY + 7) / 8;
+    uint32_t gx = (slot.width  + 31) / 32;
+    uint32_t gy = (slot.height + 15) / 16;
+
     vkCmdDispatch(cmd, gx, gy, 1);
 
-    // Barriera: SHADER_WRITE -> HOST_READ sui buffer.
-    // L'encoder leggera' i mappedPtrs dopo il wait sul semaforo; questa barriera
-    // garantisce visibility lato host.
     int numBufs = (slot.format == RGB2YUVFormat::NV12) ? 2 : 3;
     VkBufferMemoryBarrier bars[3]{};
     for (int i = 0; i < numBufs; ++i) {
         bars[i].sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
         bars[i].srcAccessMask       = VK_ACCESS_SHADER_WRITE_BIT;
-        bars[i].dstAccessMask       = VK_ACCESS_HOST_READ_BIT;
+        bars[i].dstAccessMask       = VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
         bars[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         bars[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         bars[i].buffer              = slot.buffers[i];
@@ -683,7 +633,7 @@ void RGB2YUVPipeline::recordDispatch(VkCommandBuffer cmd, RGB2YUVSlotResources& 
     }
     vkCmdPipelineBarrier(cmd,
                          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         VK_PIPELINE_STAGE_HOST_BIT,
+                         VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          0, 0, nullptr, numBufs, bars, 0, nullptr);
 }
 
@@ -737,8 +687,7 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
 #endif
     vkResetFences(m_ctx->device, 1, &slot.fence);
 
-    // Update descriptor (sicuro adesso: fence già atteso).
-    {
+  {
         VkDescriptorImageInfo inImg{};
         inImg.imageView   = slot.inputView;
         inImg.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -758,55 +707,24 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
     recordDispatch(slot.cmd, slot);
     vkEndCommandBuffer(slot.cmd);
 
-    // Sceglie il semaforo binario del ring per segnalare il completamento.
+    // Sceglie il semaforo binario dal ring di output
     VkSemaphore signalSem = slot.semRing[slot.semWriteIdx];
     slot.semWriteIdx = (slot.semWriteIdx + 1) % RGB2YUVSlotResources::kSemRing;
     slot.computeFinished = signalSem;
 
     bool gpuWait = (waitTimelineValue != 0);
-#ifdef __APPLE__
-    gpuWait = true; // We want the GPU to wait, but NOT the CPU.
-#endif
-    /*
-#ifdef __APPLE__
-    if (waitTimelineValue != 0) {
-        VkSemaphoreWaitInfo wi{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
-        wi.semaphoreCount = 1;
-        wi.pSemaphores    = &slot.mixerTimeline;
-        wi.pValues        = &waitTimelineValue;
 
-        // Leggi il valore corrente PRIMA del wait, per diagnosi.
-        uint64_t cur = 0;
-        vkGetSemaphoreCounterValue(m_ctx->device, slot.mixerTimeline, &cur);
-        DEJAVISUI_LOG_DEBUG("[RGB2YUV][mac] attendo timeline %llu (ora=%llu)",
-                            (unsigned long long)waitTimelineValue,
-                            (unsigned long long)cur);
-
-        VkResult wr = vkWaitSemaphores(m_ctx->device, &wi, 1'000'000'000ull);
-        if (wr != VK_SUCCESS) {
-            // SE vedi questo: il render submit NON ha firmato il timeline ->
-            // e' il mix binario+timeline che MoltenVK non gestisce. (vedi sotto)
-            uint64_t after = 0;
-            vkGetSemaphoreCounterValue(m_ctx->device, slot.mixerTimeline, &after);
-            DEJAVISUI_LOG_ERROR("[RGB2YUV][mac] timeline NON firmato: wr=%d valore=%llu (atteso %llu)",
-                                wr, (unsigned long long)after,
-                                (unsigned long long)waitTimelineValue);
-            vkResetFences(m_ctx->device, 1, &slot.fence);
-            return;
-        }
-        gpuWait = false;   // gia' atteso sull'host
-    }
-#endif
-    */
     VkSemaphore          waitSems[1]   = { slot.mixerTimeline };
     uint64_t             waitValues[1] = { waitTimelineValue };
     VkPipelineStageFlags waitStages[1] = { waitStage };
 
+    // --- CORREZIONE SEMAFORI: Prepariamo le strutture per agganciare sia il wait timeline che il signal binario ---
     VkSemaphore signalSems[1]   = { signalSem };
-    uint64_t    signalValues[1] = { 0 };   // ignored per i binari
+    uint64_t    signalValues[1] = { 0 }; // 0 per i semafori binari standard
 
-    VkTimelineSemaphoreSubmitInfo timelineInfo{
-        VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+    VkTimelineSemaphoreSubmitInfo timelineInfo{ VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO };
+
+    // Configurazione Signal (Semaforo Binario di fine calcolo compute)
     timelineInfo.signalSemaphoreValueCount = 1;
     timelineInfo.pSignalSemaphoreValues    = signalValues;
 
@@ -814,8 +732,10 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
     si.pNext                = &timelineInfo;
     si.commandBufferCount   = 1;
     si.pCommandBuffers      = &slot.cmd;
-    si.signalSemaphoreCount = 0;
-    si.pSignalSemaphores    = nullptr;
+
+    // Assegnazione dei semafori di Signal nel SubmitInfo principale
+    si.signalSemaphoreCount = 1;
+    si.pSignalSemaphores    = signalSems;
 
     if (gpuWait) {
         timelineInfo.waitSemaphoreValueCount = 1;
@@ -827,14 +747,13 @@ void RGB2YUVPipeline::submitAsync(RGB2YUVSlotResources& slot,
 
     {
         std::lock_guard<std::mutex> qlock(m_ctx->computeQueueMutexRef());
-        VkResult r = VulkanQueueSubmit(m_ctx->computeQueue, 1, &si, slot.fence,"RGB2YUVPipeline::submitAsync");
-        if (r != VK_SUCCESS) {
-            DEJAVISUI_LOG_ERROR("[RGB2YUV] vkQueueSubmit: %d", r);
-            vkResetFences(m_ctx->device, 1, &slot.fence);
+        VkResult r = VulkanQueueSubmit(m_ctx->computeQueue, 1, &si, slot.fence, "RGB2YUVPipeline::submitAsync");
+        if ( r != VK_SUCCESS) {
+            DEJAVISUI_LOG_ERROR("[RGB2YUV] vkQueueSubmit fallito: %d", r);
             return;
         }
-    }
 
+    }
     {
         std::lock_guard<std::mutex> lk(slot.pendingSemMutex);
         slot.pendingSemaphores.push_back(signalSem);

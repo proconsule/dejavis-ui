@@ -87,100 +87,27 @@ static void enc_ff_vk_unlock_queue(AVHWDeviceContext* c, uint32_t qf, uint32_t){
     static_cast<VulkanContext*>(c->user_opaque)->queueMutex(qf).unlock();
 }
 
-bool CAV_ENCODER::InitVulkanEncoderHW()
+bool CAV_ENCODER::InitVulkanEncoderHW(AVBufferRef* shared_hw_ctx)
 {
-    if (!m_ctx || m_ctx->device == VK_NULL_HANDLE) {
-        DEJAVISUI_LOG_ERROR("[ENCODER] VulkanContext non valido");
+    if (!shared_hw_ctx) {
+        DEJAVISUI_LOG_ERROR("[ENCODER] Contesto Vulkan condiviso non valido");
         return false;
     }
 
-    hw_device_ctx = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VULKAN);
-    if (!hw_device_ctx) {
-        DEJAVISUI_LOG_ERROR("[ENCODER] av_hwdevice_ctx_alloc(VULKAN) fallito");
+    // Incrementa il reference counter interno di FFmpeg
+    this->m_hw_device_ref = av_buffer_ref(shared_hw_ctx);
+    if (!this->m_hw_device_ref) {
         return false;
     }
 
-    AVHWDeviceContext*     devCtx = reinterpret_cast<AVHWDeviceContext*>(hw_device_ctx->data);
-    AVVulkanDeviceContext* vkCtx  = reinterpret_cast<AVVulkanDeviceContext*>(devCtx->hwctx);
+    // Per consistenza se hai anche una variabile locale hw_device_ctx
+    this->hw_device_ctx = this->m_hw_device_ref;
+    this->hw_pix_fmt = AV_PIX_FMT_VULKAN;
 
-    // Serve ai callback di lock per ritrovare i tuoi mutex.
-    devCtx->user_opaque = m_ctx;
-
-    // --- Handle base -----------------------------------------------------------
-    vkCtx->get_proc_addr = vkGetInstanceProcAddr;   // se usi volk, passa il loader di volk
-    vkCtx->alloc         = nullptr;
-    vkCtx->inst          = m_ctx->instance;
-    vkCtx->phys_dev      = m_ctx->physicalDevice;
-    vkCtx->act_dev       = m_ctx->device;
-
-    // --- Feature realmente abilitate al device-creation (con la sua pNext-chain)
-    vkCtx->device_features = m_ctx->deviceFeatures2;
-
-    vkCtx->enabled_inst_extensions    = nullptr;
-    vkCtx->nb_enabled_inst_extensions = 0;
-
-    vkCtx->enabled_dev_extensions     = m_ctx->devExt.data();    // deve restare vivo
-    vkCtx->nb_enabled_dev_extensions  = (int)m_ctx->devExt.size();
-
-
-#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(59, 34, 100)
-    int n = 0;
-    auto addQF = [&](uint32_t idx, int num, VkQueueFlagBits flags,
-                     VkVideoCodecOperationFlagBitsKHR vcaps)
-    {
-        if (idx == std::numeric_limits<uint32_t>::max() || n >= 64) return;
-        vkCtx->qf[n].idx        = (int)idx;
-        vkCtx->qf[n].num        = num;
-        vkCtx->qf[n].flags      = flags;
-        vkCtx->qf[n].video_caps = vcaps;
-        ++n;
-    };
-
-
-
-    addQF(m_ctx->graphicsQueueFamily, 1, VK_QUEUE_GRAPHICS_BIT,
-          (VkVideoCodecOperationFlagBitsKHR)0);
-    addQF(m_ctx->computeQueueFamily,  1, VK_QUEUE_COMPUTE_BIT,
-          (VkVideoCodecOperationFlagBitsKHR)0);
-    addQF(m_ctx->transferQueueFamily, 1, VK_QUEUE_TRANSFER_BIT,
-          (VkVideoCodecOperationFlagBitsKHR)0);
-    addQF(m_ctx->encodeQueueFamily,   1, VK_QUEUE_VIDEO_ENCODE_BIT_KHR,
-          (VkVideoCodecOperationFlagBitsKHR)(
-              VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR |
-              VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR));
-    vkCtx->nb_qf = n;
-#else
-    vkCtx->queue_family_index        = (int)m_ctx->graphicsQueueFamily; vkCtx->nb_graphics_queues = 1;
-    vkCtx->queue_family_tx_index     = (int)m_ctx->transferQueueFamily; vkCtx->nb_tx_queues       = 1;
-    vkCtx->queue_family_comp_index   = (int)m_ctx->computeQueueFamily;  vkCtx->nb_comp_queues     = 1;
-    vkCtx->queue_family_encode_index = -1;                              vkCtx->nb_encode_queues   = 0;
-    if (m_ctx->encodeQueueFamily != UINT32_MAX) {
-        vkCtx->queue_family_encode_index = (int)m_ctx->encodeQueueFamily;
-        vkCtx->nb_encode_queues          = 1;
-    } else {
-        vkCtx->queue_family_encode_index = -1;
-        vkCtx->nb_encode_queues          = 0;
-    }
-#endif
-
-    // --- Lock condiviso con il renderer ---------------------------------------
-    vkCtx->lock_queue   = enc_ff_vk_lock_queue;
-    vkCtx->unlock_queue = enc_ff_vk_unlock_queue;
-
-    // --- Init: FFmpeg adotta il tuo device ------------------------------------
-    int err = av_hwdevice_ctx_init(hw_device_ctx);
-    if (err < 0) {
-        char e[256]; av_strerror(err, e, sizeof(e));
-        DEJAVISUI_LOG_ERROR("[ENCODER] av_hwdevice_ctx_init(VULKAN) fallito: %s", e);
-        av_buffer_unref(&hw_device_ctx);   // -> nullptr
-        return false;
-    }
-
-    hw_pix_fmt = AV_PIX_FMT_VULKAN;
-    m_hw_device_ref = hw_device_ctx;
-    DEJAVISUI_LOG_DEBUG("[ENCODER] FFmpeg Vulkan HW pronto sul device condiviso");
+    DEJAVISUI_LOG_DEBUG("[ENCODER] Riferimento FFmpeg Vulkan HW agganciato sul device condiviso");
     return true;
 }
+
 
 bool CAV_ENCODER::allocateSlotPool() {
     m_slots.clear();
@@ -512,7 +439,7 @@ bool CAV_ENCODER::TryVideoEncoder(std::string name,int width, int height, int bi
 bool CAV_ENCODER::setupVideo(int width, int height, int bitrate) {
 
 #ifndef __APPLE__
-    InitVulkanEncoderHW();
+
 #endif
     for (const auto& cand : kCandidates) {
         if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;

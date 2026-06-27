@@ -178,8 +178,11 @@ int main(int argc, char* argv[]) {
     projectm_wrapper.PostProcessInit();
     Renderer.Init_ImGui();
 
+    /* UGLY JUST FOR TESTING */
+    Renderer.ffmpeg_vk_ctx =  Renderer.CreateFFmpegVulkanHWContext();
 
     AV_Encoder.InitHW(&Renderer.m_ctx);
+    AV_Encoder.InitVulkanEncoderHW(Renderer.ffmpeg_vk_ctx);
     AV_Encoder.init(ndi_out_config["enabled"].asBool(),Renderer.core_w,Renderer.core_h,srt_out_config["video_bitrate"].asInt(),srt_out_config["audio_bitrate"].asInt(),Audio.AUDIO_MIXER.master_samplerate,&Audio.srtLiveBuffer_planar);
     Audio.av_ndi_sender = &AV_Encoder.m_ndi_sender;
 

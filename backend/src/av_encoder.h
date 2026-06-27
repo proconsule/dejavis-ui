@@ -172,7 +172,7 @@ public:
 
     bool init(bool ndi_output,int width, int height, int video_bitrate,int audio_bitrate, int sampleRate, MultiChannelRingBuffer* audioBuf);
 
-    bool InitVulkanEncoderHW();
+    bool InitVulkanEncoderHW(AVBufferRef *shared_hw_ctx);
 
     bool init_vaapi_context(AVCodecContext* ctx);
     void addOutput(const std::string& url, const std::string& format);

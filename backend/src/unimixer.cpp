@@ -72,7 +72,7 @@ bool cunimixer::AddVideoFilePlayer(int _audio_mixer_id) {
     video_ref->videoMixerTextures[slot].AV_DECODER = new CAV_DECODER();
     video_ref->videoMixerTextures[slot].AV_DECODER->SetFileBroswerBasePath(video_base_path);
     video_ref->videoMixerTextures[slot].AV_DECODER->InitDecoder(&video_ref->m_ctx,input_item->buffer_planar.get(),48000,2);
-    video_ref->videoMixerTextures[slot].AV_DECODER->InitFFmpegVulkanHW();
+    video_ref->videoMixerTextures[slot].AV_DECODER->InitFFmpegVulkanHW(video_ref->ffmpeg_vk_ctx);
 
     return true;
 }
@@ -283,9 +283,9 @@ void cunimixer::SetVideoMixerProps(videomixeritem &prop,int _viddeo_mixerid) {
 
 }
 
-void cunimixer::SetDownscale_Lanczos(int _viddeo_mixerid,bool _active) {
-    DEJAVISUI_LOG_DEBUG("Lanczos downscale %d",_active);
-    video_ref->videoMixerTextures[_viddeo_mixerid].useLanczos = _active;
+void cunimixer::SetDownscale_Bicubic(int _viddeo_mixerid,bool _active) {
+    DEJAVISUI_LOG_DEBUG("Bicubic downscale %d",_active);
+    video_ref->videoMixerTextures[_viddeo_mixerid].useBicubic = _active;
 }
 
 

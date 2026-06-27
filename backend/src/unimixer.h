@@ -97,7 +97,7 @@ public:
 
     void SetVideoMixerProps(videomixeritem &prop, int _viddeo_mixerid);
 
-    void SetDownscale_Lanczos(int _viddeo_mixerid, bool _active);
+    void SetDownscale_Bicubic(int _viddeo_mixerid, bool _active);
 
 
     /* AUDIO HELPERS */

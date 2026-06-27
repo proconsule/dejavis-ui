@@ -779,10 +779,10 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			Renderer->m_pendingImageUnLoad.shouldUnLoad.store(true);
 		}
 
-		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_IMAGE_DOWNSCALE_LANCZOS) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_IMAGE_DOWNSCALE_BICUBIC) {
 			int videomixeridx = json["input_index"].asInt();
 			bool _active = json["active"].asBool();;
-			m_cunimixer->SetDownscale_Lanczos(videomixeridx,_active);
+			m_cunimixer->SetDownscale_Bicubic(videomixeridx,_active);
 		}
 
 

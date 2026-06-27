@@ -246,7 +246,7 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
         };
 
         bool opened = false;
-#ifndef _WIN32
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(59, 34, 100)
         if (hw_device_ctx && v_codec && codec_supports_vulkan(v_codec)) {
             DEJAVISUI_LOG_DEBUG("[DECODER] tentativo decode Vulkan per %s", v_codec->name);
             opened = tryOpen(hw_device_ctx, AV_PIX_FMT_VULKAN);

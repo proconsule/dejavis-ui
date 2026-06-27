@@ -328,11 +328,12 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
 
 
     float priority = 1.0f;
+    float queuePriorities[2] = { 1.0f, 1.0f };
     for (uint32_t family : uniqueFamilies) {
         VkDeviceQueueCreateInfo qi{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
         qi.queueFamilyIndex = family;
-        qi.queueCount       = 1;
-        qi.pQueuePriorities = &priority;
+        qi.queueCount       = 2;
+        qi.pQueuePriorities = queuePriorities;
         queueInfos.push_back(qi);
     }
 
@@ -1108,13 +1109,13 @@ AVBufferRef* CRenderer::CreateFFmpegVulkanHWContext()
     };
 
 
-    addQF(m_ctx.graphicsQueueFamily, 1, VK_QUEUE_GRAPHICS_BIT,
+    addQF(m_ctx.graphicsQueueFamily, 2, VK_QUEUE_GRAPHICS_BIT,
           (VkVideoCodecOperationFlagBitsKHR)0);
-    addQF(m_ctx.computeQueueFamily,  1, VK_QUEUE_COMPUTE_BIT,
+    addQF(m_ctx.computeQueueFamily,  2, VK_QUEUE_COMPUTE_BIT,
           (VkVideoCodecOperationFlagBitsKHR)0);
-    addQF(m_ctx.transferQueueFamily, 1, VK_QUEUE_TRANSFER_BIT,
+    addQF(m_ctx.transferQueueFamily, 2, VK_QUEUE_TRANSFER_BIT,
           (VkVideoCodecOperationFlagBitsKHR)0);
-    addQF(m_ctx.decodeQueueFamily,   1, VK_QUEUE_VIDEO_DECODE_BIT_KHR,
+    addQF(m_ctx.decodeQueueFamily,   2, VK_QUEUE_VIDEO_DECODE_BIT_KHR,
           (VkVideoCodecOperationFlagBitsKHR)(
               VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR |
               VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR|VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR));
@@ -1128,21 +1129,21 @@ AVBufferRef* CRenderer::CreateFFmpegVulkanHWContext()
     //     quindi su versioni transitorie va riempito esplicitamente per non far
     //     credere a FFmpeg che la family 0 sia tx/comp/decode.
 #else
-    vkCtx->queue_family_index        = (int)m_ctx.graphicsQueueFamily; vkCtx->nb_graphics_queues = 1;
-    vkCtx->queue_family_tx_index     = (int)m_ctx.transferQueueFamily; vkCtx->nb_tx_queues       = 1;
-    vkCtx->queue_family_comp_index   = (int)m_ctx.computeQueueFamily;  vkCtx->nb_comp_queues     = 1;
+    vkCtx->queue_family_index        = (int)m_ctx.graphicsQueueFamily; vkCtx->nb_graphics_queues = 2;
+    vkCtx->queue_family_tx_index     = (int)m_ctx.transferQueueFamily; vkCtx->nb_tx_queues       = 2;
+    vkCtx->queue_family_comp_index   = (int)m_ctx.computeQueueFamily;  vkCtx->nb_comp_queues     = 2;
     vkCtx->queue_family_decode_index = -1;
     vkCtx->nb_decode_queues   = 0;
     if (m_ctx->decodeQueueFamily != std::numeric_limits<uint32_t>::max()) {
         vkCtx->queue_family_decode_index = (int)m_ctx.decodeQueueFamily;
-        vkCtx->nb_decode_queues          = 1;
+        vkCtx->nb_decode_queues          = 2;
     } else {
         vkCtx->queue_family_decode_index = -1;
         vkCtx->nb_decode_queues          = 0;
     }
     if (m_ctx->encodeQueueFamily != std::numeric_limits<uint32_t>::max()) {
         vkCtx->queue_family_encode_index = (int)m_ctx.encodeQueueFamily;
-        vkCtx->nb_encode_queues          = 1;
+        vkCtx->nb_encode_queues          = 2;
     } else {
         vkCtx->queue_family_encode_index = -1;
         vkCtx->nb_encode_queues          = 0;

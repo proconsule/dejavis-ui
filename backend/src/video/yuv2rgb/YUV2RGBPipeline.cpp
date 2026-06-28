@@ -407,22 +407,26 @@ void YUV2RGBPipeline::drainPendingSemaphores(YUV2RGBSlotResources& slot,
     slot.pendingSemaphores.clear();
 }
 
-bool YUV2RGBPipeline::uploadVulkanFrame(YUV2RGBSlotResources& slot, AVFrame* f) {
-    if (!f || f->format != AV_PIX_FMT_VULKAN || !f->data[0]) return false;
+bool YUV2RGBPipeline::uploadVulkanFrame(YUV2RGBSlotResources& slot, AVFrame* frame) {
+    if (!slot.valid || !frame) return false;
+    if (frame->format != AV_PIX_FMT_VULKAN) return false;
 
-    AVFrame* clone = av_frame_clone(f);
-    if (!clone) return false;
+    // Nella nuova architettura (IYUVConverter), tutta la logica di sincronizzazione
+    // hardware (semafori e timeline) e copia è gestita da submitAsyncVk.
+    // Qui ci limitiamo a salvare una reference al frame Vulkan per il prossimo submit.
 
-    {
-        std::lock_guard<std::mutex> g(slot.submitMutex);
-        if (slot.inflightVkFrame) av_frame_free(&slot.inflightVkFrame);
-        slot.inflightVkFrame = clone;
-
-        slot.colorSpace = (f->colorspace == AVCOL_SPC_BT2020_NCL) ? 9
-                        : (f->colorspace == AVCOL_SPC_BT709)      ? 1 : 0;
-        slot.rangeFull  = (f->color_range == AVCOL_RANGE_JPEG)    ? 1 : 0;
-        slot.vulkanFed  = true;
+    if (!slot.inflightVkFrame) {
+        slot.inflightVkFrame = av_frame_alloc();
+    } else {
+        av_frame_unref(slot.inflightVkFrame);
     }
+
+    // Incrementiamo il reference counter del frame per mantenerlo in vita finché non viene processato
+    if (av_frame_ref(slot.inflightVkFrame, frame) < 0) {
+        return false;
+    }
+
+    slot.vulkanFed = true;
     return true;
 }
 

@@ -246,8 +246,7 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
         };
 
         bool opened = false;
-        // FFMPEG <= 7.1
-#ifndef _WIN32
+#ifndef _WIN32  //TODO ON WIN32
         if (hw_device_ctx && v_codec && codec_supports_vulkan(v_codec)) {
             DEJAVISUI_LOG_DEBUG("[DECODER] tentativo decode Vulkan per %s", v_codec->name);
             opened = tryOpen(hw_device_ctx, AV_PIX_FMT_VULKAN);

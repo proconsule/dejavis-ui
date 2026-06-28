@@ -122,8 +122,7 @@ bool CPostProcessor::uploadYuvFrameVulkan(AVFrame* frame) {
     if (needsNew) {
         auto fresh = buildSlot(w, h, ProcessingSlot::InputKind::Yuv, nullptr, swFmt);
         if (!fresh) return false;
-        ProcessingSlot* old = m_activeSlot.exchange(fresh.release(),
-                                                    std::memory_order_acq_rel);
+        ProcessingSlot* old = m_activeSlot.exchange(fresh.release(), std::memory_order_acq_rel);
         if (old) retireSlot(old);
         current = m_activeSlot.load(std::memory_order_acquire);
     }

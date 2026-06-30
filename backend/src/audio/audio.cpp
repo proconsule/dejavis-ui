@@ -1,9 +1,11 @@
 #include "audio.h"
 #include <ostream>
 #include <iostream>
+
+#include "audio_mixer.h"
 #include "backend/src/logger.h"
 
-std::vector<double> standardRates = { 
+std::vector<double> standardRates = {
     8000.0,
     16000.0,
     32000.0,
@@ -44,30 +46,8 @@ static int audioInputCallback(const void *inputBuffer, void *outputBuffer,
 
 }
 
-static int audioOutputCallback(const void *inputBuffer, void *outputBuffer,
-                         unsigned long framesPerBuffer,
-                         const PaStreamCallbackTimeInfo* timeInfo,
-                         PaStreamCallbackFlags statusFlags,
-                         void *userData) {
-
-
-    if (outputBuffer != nullptr) {
-        AudioMixerOutputItem * mixer_output_item = (AudioMixerOutputItem *)userData;
-        float* out = static_cast<float*>(outputBuffer);
-        if (mixer_output_item->buffer->getAvailableRead() >= framesPerBuffer * mixer_output_item->channels) {
-            mixer_output_item->buffer->read(out, framesPerBuffer * mixer_output_item->channels);
-        } else {
-            std::fill_n(out, framesPerBuffer * mixer_output_item->channels, 0.0f);
-            mixer_output_item->underflowCount++;
-        }
-    }
-
-    return paContinue;
-}
-
-
 CAudio::CAudio(){
-	
+
 	lastError = Pa_Initialize();
 	if (lastError != paNoError) {
 	    DEJAVISUI_LOG_ERROR("PortAudio initialization failed");
@@ -95,10 +75,10 @@ void CAudio::refreshDevices() {
 		dev.maxOutputChannels = info->maxOutputChannels;
 
 		dev.defaultSampleRate = info->defaultSampleRate;
-        dev.maxSampleRate = info->defaultSampleRate; 
-		
+        dev.maxSampleRate = info->defaultSampleRate;
+
 		if(i == defaultIn)dev.isDefaultInput = true;
-		if(i == defaultOut)dev.isDefaultOutput = true;	
+		if(i == defaultOut)dev.isDefaultOutput = true;
 
         for (double rate : standardRates) {
             PaStreamParameters params;
@@ -124,14 +104,14 @@ void CAudio::refreshDevices() {
 
         if (info->maxInputChannels > 0) inputDevices.push_back(dev);
         if (info->maxOutputChannels > 0) outputDevices.push_back(dev);
-		
+
 	}
 }
 
 
 void CAudio::Print_Audio_List(){
-	
-	
+
+
 	std::cout << "Input Devices: " << std::endl;
 	std::cout << "----------------------" << std::endl;
 	int numDevices = inputDevices.size();
@@ -197,6 +177,12 @@ void CAudio::stopMixerInput(int _mixerid) {
 }
 
 bool CAudio::startAuxDummy() {
+
+
+    AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(1)->buffer.get());
+
+
+    /*
     std::lock_guard<std::mutex> lock(audioMutex);
 
 
@@ -204,12 +190,13 @@ bool CAudio::startAuxDummy() {
     AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_id = -1;
     AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name = "Dummy Clock";
     AUDIO_MIXER.getMixerOutputItem(1)->samplerate = 48000;
+    AUDIO_MIXER.getMixerOutputItem(1)->channels = 2;
     AUDIO_MIXER.getMixerOutputItem(1)->Resampler.init(AUDIO_MIXER.master_samplerate,48000,2,2,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
 
 
     isauxDummyTimerRunning = true;
     auxdummyTimerThread = std::thread(&CAudio::startAuxDummyTimer, this);
-
+*/
     return true;
 }
 
@@ -238,32 +225,28 @@ bool CAudio::startMasterDummy() {
 
 }
 
-void CAudio::startAuxDummyTimer() {
-    std::lock_guard<std::mutex> lock(audioMutex);
-    DEJAVISUI_LOG_INFO("[AUDIO] Starting AUX Dummy Clock");
-    const int64_t sampleRate = AUDIO_MIXER.master_samplerate;;
-    const int channels = 2;
-    const size_t chunkSize = 256;
-    std::vector<float> buffer(chunkSize);
+void precise_sleep(std::chrono::microseconds duration) {
+    auto start = std::chrono::high_resolution_clock::now();
 
-    const int64_t usecPerChunk = (1000000 * (chunkSize / channels)) / sampleRate;
-
-    auto nextTick = std::chrono::steady_clock::now();
-
-    while (isauxDummyTimerRunning) {
-        if (AUDIO_MIXER.GetAuxBuffer()->getAvailableRead() >= chunkSize) {
-
-            AUDIO_MIXER.GetAuxBuffer()->read(buffer.data(), chunkSize);
-            nextTick += std::chrono::microseconds(usecPerChunk);
-            std::this_thread::sleep_until(nextTick);
-
-            auxdummyTimer.update();
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            nextTick = std::chrono::steady_clock::now();
-            auxdummyTimer.update();
-        }
+    // 1. Sospensione software per la maggior parte del tempo
+    // Lasciamo un margine di 2 millisecondi (2000 microsecondi) per evitare che il OS sfori
+    if (duration > std::chrono::microseconds(2000)) {
+        std::this_thread::sleep_for(duration - std::chrono::microseconds(2000));
     }
+
+    // 2. Ciclo di controllo attivo (Busy-Wait) per la massima precisione finale
+    while (std::chrono::high_resolution_clock::now() - start < duration) {
+        // Rilascia i cicli della CPU per un istante senza cedere il controllo all'OS scheduler
+#if defined(_MSC_VER)
+        __nop();
+#elif defined(__GNUC__) || defined(__clang__)
+        asm volatile("nop");
+#endif
+    }
+}
+
+void CAudio::startAuxDummyTimer() {
+
 
 }
 
@@ -298,7 +281,7 @@ void CAudio::startMasterDummyTimer() {
 
     std::vector<float> buffer(chunkSize);
 
-    const int64_t usecPerChunk = (1000000 * (chunkSize / channels)) / sampleRate;
+    const int64_t usecPerChunk = (1000000 * (chunkSize)) / sampleRate;
 
     auto nextTick = std::chrono::steady_clock::now();
 
@@ -319,60 +302,61 @@ void CAudio::startMasterDummyTimer() {
     }
 }
 
-
+/*
 bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
 
-    dummy = false;
+    if (AUDIO_MIXER.getMixerOutputItem(0)->isdummy) {
+        AUDIO_MIXER.getMixerOutputItem(1)->dev_audio_out.removeInputBuffer(AUDIO_MIXER.getMixerOutputItem(0)->buffer.get());
+    }
 
     AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = deviceId;
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = outputDevices[deviceId].name;
+
 
     AUDIO_MIXER.getMixerOutputItem(0)->channels = _channels;
     AUDIO_MIXER.getMixerOutputItem(0)->samplerate = _samplerate;
 
     AUDIO_MIXER.getMixerOutputItem(0)->Resampler.init(AUDIO_MIXER.master_samplerate,_samplerate,2,_channels,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
 
-    activeOutputId = deviceId;
-    PaStreamParameters outputParams;
-    outputParams.device = deviceId;
-    outputParams.channelCount = _channels;
-    outputParams.sampleFormat = paFloat32;
-    outputParams.suggestedLatency = Pa_GetDeviceInfo(deviceId)->defaultLowOutputLatency;
-    outputParams.hostApiSpecificStreamInfo = nullptr;
 
-    Pa_OpenStream(&outputStream, nullptr, &outputParams, _samplerate, 256, paClipOff, audioOutputCallback, AUDIO_MIXER.getMixerOutputItem(0));
-    DEJAVISUI_LOG_INFO("[AUDIO] Opening %s, using %d hz , channels: %d",outputDevices[deviceId].name.c_str(),_samplerate,_channels);
-    return Pa_StartStream(outputStream) == paNoError;
+    AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(0)->buffer.get());
+    AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.setMasterOutputBuffer(AUDIO_MIXER.getMixerOutputItem(0)->buffer.get());
+
+
+    bool initok =  AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.InitHW(deviceId,_channels,_samplerate);
+
+    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.name;
+
+
+    return initok;
+
 }
-
+*/
 
 bool CAudio::startAuxOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
 
-    dummy = false;
+    if (AUDIO_MIXER.getMixerOutputItem(1)->isdummy) {
+        AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.removeInputBuffer(AUDIO_MIXER.getMixerOutputItem(1)->buffer.get());
+    }
 
     AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_id = deviceId;
-    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name = outputDevices[deviceId].name;
+
 
     AUDIO_MIXER.getMixerOutputItem(1)->channels = _channels;
-
-
-
     AUDIO_MIXER.getMixerOutputItem(1)->samplerate = _samplerate;
 
-    //if (_samplerate != AUDIO_MIXER.master_samplerate) {
-    AUDIO_MIXER.getMixerOutputItem(1)->Resampler.init(AUDIO_MIXER.master_samplerate,_samplerate,_channels,2,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
-    //}
+    AUDIO_MIXER.getMixerOutputItem(1)->Resampler.init(AUDIO_MIXER.master_samplerate,_samplerate,2,_channels,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
 
-    activeAuxId = deviceId;
-    PaStreamParameters outputParams;
-    outputParams.device = deviceId;
-    outputParams.channelCount = _channels;
-    outputParams.sampleFormat = paFloat32;
-    outputParams.suggestedLatency = Pa_GetDeviceInfo(deviceId)->defaultLowOutputLatency;
-    outputParams.hostApiSpecificStreamInfo = nullptr;
 
-    Pa_OpenStream(&auxoutputStream, nullptr, &outputParams, _samplerate, 256, paClipOff, audioOutputCallback, AUDIO_MIXER.getMixerOutputItem(1));
-    return Pa_StartStream(auxoutputStream) == paNoError;
+    AUDIO_MIXER.getMixerOutputItem(1)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(1)->buffer.get());
+    AUDIO_MIXER.getMixerOutputItem(1)->dev_audio_out.setMasterOutputBuffer(AUDIO_MIXER.getMixerOutputItem(1)->buffer.get());
+
+
+    bool initok =  AUDIO_MIXER.getMixerOutputItem(1)->dev_audio_out.InitHW(deviceId,_channels,_samplerate);
+
+    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name = AUDIO_MIXER.getMixerOutputItem(1)->dev_audio_out.name;
+
+
+    return initok;
 }
 
 void CAudio::startProcessing() {
@@ -427,34 +411,26 @@ void CAudio::processMasterOutSamples(std::vector<float>& _block, bool* _dataproc
         av_ndi_sender->PushAudio(reinterpret_cast<const float* const*>(tempIn),frames);
     }
 
-
-
     *_dataprocessed = true;
 }
 
-void CAudio::processMixOutSamples(std::vector<float>& _block, bool* _dataprocessed) {
+void CAudio::processAuxOutSamples(std::vector<float>& _block, bool* _dataprocessed) {
     MultiChannelRingBuffer* InputAuxMixed = AUDIO_MIXER.getAuxProcessBuffer();
 
     const size_t channels = 2;
-    const size_t frames   = _block.size() / channels;
+    const size_t frames   = _block.size();
 
     if (InputAuxMixed->getAvailableRead() < frames) return;
 
     if (AUDIO_MIXER.GetAuxBuffer()->getAvailableWrite() < _block.size()) return;
 
-
     float* tempIn[2] = { AUDIO_MIXER.m_auxRead[0].data(), AUDIO_MIXER.m_auxRead[1].data() };
     if (!InputAuxMixed->read(tempIn, frames)) return;
 
-    auto& outResampler = AUDIO_MIXER.getMixerOutputItem(1)->Resampler;
-    AVFrame* converted = outResampler.processPlanar(tempIn, frames);
-    if (!converted) return;
-
     AUDIO_MIXER.ProcessAuxOutput(
-        (float*)converted->data[0],
-        converted->nb_samples * channels
+        tempIn,
+        frames
     );
-
     if (AUDIO_MIXER.RTCAudio &&
     AUDIO_MIXER.RTCAudio->mixer_sel_value.load() == 1) {
         AUDIO_MIXER.RTCAudio->sendAudioFrame(
@@ -464,7 +440,11 @@ void CAudio::processMixOutSamples(std::vector<float>& _block, bool* _dataprocess
         );
     }
 
-
+    auto* ndiOut = AUDIO_MIXER.getMixerOutputItem(
+        CAUDIO_MIXER::MIXER_OUTPUTS::OUTPUT_AUX);
+    if (ndiOut->ndi_audio_out.isRunning()) {
+        ndiOut->ndi_audio_out.PushAudio(reinterpret_cast<const float* const*>(tempIn),frames);
+    }
 
     *_dataprocessed = true;
 }
@@ -481,6 +461,58 @@ void CAudio::processTrashOutSamples( std::vector<float> &_block,bool * _dataproc
     }
 }
 
+bool CAudio::StartAudioDev(CAUDIO_MIXER::MIXER_OUTPUTS outputnum,int deviceId,uint32_t _channels,uint32_t _samplerate) {
+    int outdevidx = -1;
+    int dummyclock_idx = -1;
+    if (outputnum == CAUDIO_MIXER::OUTPUT_MASTER) {
+        outdevidx = 0;
+        dummyclock_idx = 1;
+    }
+    if (outputnum == CAUDIO_MIXER::OUTPUT_AUX) {
+        outdevidx = 1;
+        dummyclock_idx = 0;
+    }
+    if (outdevidx == -1)return false;
+
+    if (AUDIO_MIXER.getMixerOutputItem(outdevidx)->isdummy) {
+        AUDIO_MIXER.getMixerOutputItem(dummyclock_idx)->dev_audio_out.removeInputBuffer(AUDIO_MIXER.getMixerOutputItem(outdevidx)->buffer.get());
+    }
+
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->audio_dev_id = deviceId;
+
+
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->channels = _channels;
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->samplerate = _samplerate;
+
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->Resampler.init(AUDIO_MIXER.master_samplerate,_samplerate,2,_channels,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
+
+
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(outdevidx)->buffer.get());
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.setMasterOutputBuffer(AUDIO_MIXER.getMixerOutputItem(outdevidx)->buffer.get());
+
+
+    bool initok =  AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.InitHW(deviceId,_channels,_samplerate);
+
+    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.name;
+
+    return initok;
+}
+
+bool CAudio::StartDummyDevice(CAUDIO_MIXER::MIXER_OUTPUTS outputnum,CAUDIO_MIXER::MIXER_OUTPUTS master_clocknum) {
+
+    AUDIO_MIXER.getMixerOutputItem(outputnum)->audio_dev_id = -1;
+    AUDIO_MIXER.getMixerOutputItem(outputnum)->audio_dev_name = "Dummy Clock";
+    AUDIO_MIXER.getMixerOutputItem(outputnum)->samplerate = AUDIO_MIXER.getMixerOutputItem(master_clocknum)->samplerate;
+    AUDIO_MIXER.getMixerOutputItem(outputnum)->channels = 2;
+    AUDIO_MIXER.getMixerOutputItem(outputnum)->Resampler.init(AUDIO_MIXER.master_samplerate,AUDIO_MIXER.getMixerOutputItem(outputnum)->samplerate,2,2,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
+
+
+    AUDIO_MIXER.getMixerOutputItem(master_clocknum)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(outputnum)->buffer.get());
+    DEJAVISUI_LOG_INFO("Adding %s -> %s",AUDIO_MIXER.getMixerOutputItem(outputnum)->audio_dev_name.c_str(),AUDIO_MIXER.getMixerOutputItem(master_clocknum)->audio_dev_name.c_str());
+    return true;
+}
+
+
 void CAudio::processingLoop() {
     size_t framesToProcess = 256;
     size_t channels = 2;
@@ -495,22 +527,16 @@ void CAudio::processingLoop() {
         if (m_penedingAudioDevLoad.shouldLoad.load()) {
             m_penedingAudioDevLoad.shouldLoad.store(false);
             if (m_penedingAudioDevLoad.outputtype == 0) {
-                stopMasterOut();
-                if (m_penedingAudioDevLoad.deviceid == -1) {
-                    startMasterDummy();
-                }else {
-                    startMasterOutput(m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
-                }
-            }
-            if (m_penedingAudioDevLoad.outputtype == 1) {
-                stopAuxOut();
-                if (m_penedingAudioDevLoad.deviceid == -1) {
-                    startAuxDummy();
-                }else {
-                    startAuxOutput(m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
-                }
+
+                StartAudioDev(CAUDIO_MIXER::OUTPUT_MASTER,m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
+
             }
         }
+        if (m_penedingDummyLoad.shouldLoad.load()) {
+            m_penedingDummyLoad.shouldLoad.store(false);
+            StartDummyDevice(m_penedingDummyLoad.device,m_penedingDummyLoad.masterclock_device);
+        }
+
 
         AUDIO_MIXER.ProcessMix(samplesNeeded);
 
@@ -519,7 +545,7 @@ void CAudio::processingLoop() {
         bool dataProcessedTrash = false;
 
         output_samples_process.enqueue([this, &blockMaster,&dataProcessedMaster]{ processMasterOutSamples(blockMaster,&dataProcessedMaster); });
-        output_samples_process.enqueue([this, &blockMix,&dataProcessedAux]{ processMixOutSamples(blockMix,&dataProcessedAux); });
+        output_samples_process.enqueue([this, &blockMix,&dataProcessedAux]{ processAuxOutSamples(blockMix,&dataProcessedAux); });
         output_samples_process.enqueue([this, &blockTrash,&dataProcessedTrash]{ processTrashOutSamples(blockTrash,&dataProcessedTrash); });
 
         output_samples_process.waitForAll(3);
@@ -547,7 +573,7 @@ Json::Value CAudio::getStatusJson() {
 
 Json::Value CAudio::getDevicesJson() {
     Json::Value root;
-    
+
     auto serialize = [](const std::vector<AudioDevice>& devices) {
         Json::Value list(Json::arrayValue);
         for (const auto& d : devices) {
@@ -568,7 +594,7 @@ Json::Value CAudio::getDevicesJson() {
 
     root["inputs"] = serialize(inputDevices);
     root["outputs"] = serialize(outputDevices);
-    
+
     return root;
 }
 

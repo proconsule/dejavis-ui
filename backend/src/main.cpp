@@ -102,12 +102,12 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-*/
+
     if (!Audio.startAuxDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Aux Dummy");
         return -1;
     }
-
+*/
     if (!Audio.startTrashDummy()) {
         DEJAVISUI_LOG_ERROR("Failed starting Trash Dummy");
         return -1;
@@ -124,6 +124,12 @@ int main(int argc, char* argv[]) {
     Audio.m_penedingAudioDevLoad.outputtype = 0;
     Audio.m_penedingAudioDevLoad.channels = 2;
     Audio.m_penedingAudioDevLoad.shouldLoad.store(true);
+
+    Audio.m_penedingDummyLoad.device = CAUDIO_MIXER::OUTPUT_AUX;
+    Audio.m_penedingDummyLoad.masterclock_device = CAUDIO_MIXER::OUTPUT_MASTER;
+    Audio.m_penedingDummyLoad.shouldLoad.store(true);
+
+
     Audio.startProcessing();
 
     Audio.fileplayers_basepath = audiopath.c_str();

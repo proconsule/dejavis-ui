@@ -25,6 +25,8 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "audio_dev.h"
+
 
 enum class GainPreset {
     Plus0dB = 0,
@@ -97,14 +99,16 @@ struct AudioMixerOutputItem {
     AudioResampler Resampler;
     CNDISender ndi_audio_out;
 
+    cdejavisaudio_dev dev_audio_out;
 
+    bool isdummy = false;
 
     AudioMixerOutputItem(std::string _name,size_t len ,size_t _oubufle = 16348)
     :name(_name), buffer(std::make_unique<RingBuffer>(len)) {
         audio_dev_name = _name;
         audio_dev_id = -1;
         volume = 1.0f;
-
+        isdummy = false;
 
 
     }
@@ -264,7 +268,7 @@ public:
     void ProcessUnassigned(size_t _samples);
 
     void ProcessMasterOutput(float **_planar_in, int _channel_size);
-    void ProcessAuxOutput(float * samples,int size);
+    void ProcessAuxOutput(float **_planar_in,int _channel_size);
 
     void ProcessMixInputs(size_t _samples);
 

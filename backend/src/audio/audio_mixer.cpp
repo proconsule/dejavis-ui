@@ -284,9 +284,10 @@ void CAUDIO_MIXER::ProcessUnassignedOutput(float * samples,int size) {
 }
 
 
-void CAUDIO_MIXER::ProcessAuxOutput(float * samples,int size) {
+void CAUDIO_MIXER::ProcessAuxOutput(float **_planar_in,int _channel_size) {
 
     auto* out = m_outputs[1].get();
+
 
     float volL = out->volume;
     float volR = out->volume;
@@ -296,18 +297,33 @@ void CAUDIO_MIXER::ProcessAuxOutput(float * samples,int size) {
         volR *= (1.0f + out->pan);
     }
 
-    output_effectBank.Process(
-        m_outputs[1]->limiterSlot,
-        samples,
-        size / 2,
-        1.0f
-    );
-    m_outputs[1]->levelL = output_effectBank.GetPostLevelL (m_outputs[1]->limiterSlot);
-    m_outputs[1]->levelR = output_effectBank.GetPostLevelR (m_outputs[1]->limiterSlot);
-    m_outputs[1]->prelimiterL = output_effectBank.GetPreLevelL (m_outputs[1]->limiterSlot);
-    m_outputs[1]->prelimiterR = output_effectBank.GetPreLevelR (m_outputs[1]->limiterSlot);
+    for (int i = 0; i < _channel_size; i++) {
+        _planar_in[0][i] *= volL;
+        _planar_in[1][i] *= volR;
+    }
 
-    out->buffer->write(samples, size);
+
+    output_effectBank.ProcessPlanar(
+        m_outputs[1]->limiterSlot,
+        _planar_in[0],
+        _planar_in[1],
+        _channel_size
+    );
+
+    int slot = m_outputs[1]->limiterSlot;
+    m_outputs[1]->levelL = output_effectBank.GetPostLevelL(slot);
+    m_outputs[1]->levelR = output_effectBank.GetPostLevelR(slot);
+    m_outputs[1]->prelimiterL = output_effectBank.GetPreLevelL(slot);
+    m_outputs[1]->prelimiterR = output_effectBank.GetPreLevelR(slot);
+
+
+    auto& outResampler = getMixerOutputItem(1)->Resampler;
+    AVFrame* converted = outResampler.processPlanar(_planar_in, _channel_size);
+    if (!converted) return;
+
+
+    out->buffer->write((float *)converted->data[0], converted->nb_samples * 2);
+
 }
 
 void CAUDIO_MIXER::ProcessMixInputs(size_t _samples) {
@@ -381,7 +397,7 @@ void CAUDIO_MIXER::ProcessAuxMix(size_t frames) {
     ZoneScopedN("ProcessAuxMix");
     size_t aux_frames = scaleSamples(frames, 48000, m_outputs[1]->samplerate);
 
-    if (m_outputs[1].get()->buffer->getAvailableWrite() < aux_frames) return;
+    if (m_outputs[1].get()->buffer->getAvailableWrite() < aux_frames*2) return;
 
     std::fill(m_AuxMix[0].begin(), m_AuxMix[0].begin() + frames, 0.0f);
     std::fill(m_AuxMix[1].begin(), m_AuxMix[1].begin() + frames, 0.0f);
@@ -716,8 +732,8 @@ Json::Value CAUDIO_MIXER::GetStatus() {
 
     auxout["pan"] = m_outputs[1]->pan;
     auxout["volume"] = m_outputs[1]->volume;
-    masterout["buffer_size"] = (int)m_outputs[1]->buffer->getCapacity();
-    masterout["buffer_used"] = (int)m_outputs[1]->buffer->getAvailableRead();
+    auxout["buffer_size"] = (int)m_outputs[1]->buffer->getCapacity();
+    auxout["buffer_used"] = (int)m_outputs[1]->buffer->getAvailableRead();
 
     status["master_output"] = masterout;
     status["aux_output"] = auxout;

@@ -42,6 +42,14 @@ struct PendingAudioOutDevLoad {
 
 };
 
+struct PendingDummyLoad {
+	std::atomic<bool> shouldLoad{false};
+	CAUDIO_MIXER::MIXER_OUTPUTS device;
+	CAUDIO_MIXER::MIXER_OUTPUTS masterclock_device;
+
+};
+
+
 class CAudio
 {
   public:
@@ -105,6 +113,7 @@ class CAudio
 	CNDISender * av_ndi_sender = nullptr;
 
 	PendingAudioOutDevLoad m_penedingAudioDevLoad;
+	PendingDummyLoad m_penedingDummyLoad;
 
 
 private:
@@ -149,9 +158,17 @@ private:
     std::atomic<bool> isRunning{false};
 
 	void processMasterOutSamples(std::vector<float> &_block,bool * _dataprocessed);
-	void processMixOutSamples(std::vector<float> &_block,bool * _dataprocessed);
+
+    void processAuxOutSamples(std::vector<float> &_block, bool *_dataprocessed);
+
+    void processMixOutSamples(std::vector<float> &_block,bool * _dataprocessed);
 	void processTrashOutSamples( std::vector<float> &_block,bool * _dataprocessed);
-	void processingLoop();
+
+    bool StartAudioDev(CAUDIO_MIXER::MIXER_OUTPUTS outputnum, int deviceId, uint32_t _channels, uint32_t _samplerate);
+
+    bool StartDummyDevice(CAUDIO_MIXER::MIXER_OUTPUTS outputnum,CAUDIO_MIXER::MIXER_OUTPUTS master_clocknum);
+
+    void processingLoop();
 	
 	int activeInputId = -1;
     int activeOutputId = -1;

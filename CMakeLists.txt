@@ -283,6 +283,7 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/audio/audio_mixer.cpp
         backend/src/audio/audio_rtc.cpp
         backend/src/audio/audio_resampler.cpp
+        backend/src/audio/audio_dev.cpp
         backend/src/audioplayer/audioplayer.cpp
         backend/src/db/milkplaylistdb.cpp
         backend/src/fs/localfilebrowser.cpp

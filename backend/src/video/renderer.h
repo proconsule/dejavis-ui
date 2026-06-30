@@ -102,7 +102,7 @@ struct videomixeritem {
 
 };
 
-typedef struct{
+struct gpulist_struct{
     VkPhysicalDevice physicalDevice;
     VkPhysicalDeviceProperties dev_prop;
     VkPhysicalDeviceMemoryProperties mem_prop; // Necessaria per calcolare la VRAM reale
@@ -112,7 +112,7 @@ typedef struct{
     uint32_t api_major = 0;
     uint32_t api_minor = 0;
     std::string displayName;
-}gpulist_struct;
+};
 
 struct PendingImageLoad {
 	std::atomic<bool> shouldLoad{false};

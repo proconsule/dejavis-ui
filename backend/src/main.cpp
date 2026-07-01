@@ -206,6 +206,9 @@ int main(int argc, char* argv[]) {
         AV_Encoder.addOutput(srt_url,"mpegts");
     }
 
+#ifdef USE_SPOUT
+    Renderer.Init_SPOUT2();
+#endif
 
     CWebSocket::Renderer = &Renderer;
     CWebSocket::Audio = &Audio;

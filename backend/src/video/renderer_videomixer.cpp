@@ -719,9 +719,13 @@ bool CRenderer::AddImageToMixer(const unsigned char* img_data,int img_size,bool 
 }
 
 void CRenderer::RemoveImageFromMixer(int slot) {
+    std::lock_guard<std::mutex> lock(m_videoMixerMutex);
     if (slot > 0 && slot < 10) {
-        videoMixerTextures[slot] = videomixeritem();
+        int originalidx = videoMixerTextures[slot].originalIdx;
         CleanupTexture(videoTextures[slot].VkTexture);
+        videoMixerTextures[slot] = videomixeritem();
+        videoMixerTextures[slot].originalIdx = originalidx;
+
     }
 }
 

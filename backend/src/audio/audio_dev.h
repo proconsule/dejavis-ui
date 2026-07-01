@@ -18,7 +18,6 @@ struct cdejavisaudio_dev_buffer_struct {
     int32_t _channels;
 };
 
-
 class cdejavisaudio_dev {
 public:
     cdejavisaudio_dev();
@@ -93,8 +92,6 @@ private:
 
 
     cdejavisaudio_dev_buffer_struct input_data;
-
-
 
 };
 

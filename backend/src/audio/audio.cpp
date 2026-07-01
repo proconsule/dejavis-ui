@@ -106,6 +106,9 @@ void CAudio::refreshDevices() {
         if (info->maxOutputChannels > 0) outputDevices.push_back(dev);
 
 	}
+
+    DEJAVISUI_LOG_INFO("[AUDIO] Found %d audio input devices",inputDevices.size());
+    DEJAVISUI_LOG_INFO("[AUDIO] Found %d audio output devices",outputDevices.size());
 }
 
 
@@ -176,30 +179,6 @@ void CAudio::stopMixerInput(int _mixerid) {
 
 }
 
-bool CAudio::startAuxDummy() {
-
-
-    AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(1)->buffer.get());
-
-
-    /*
-    std::lock_guard<std::mutex> lock(audioMutex);
-
-
-
-    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_id = -1;
-    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name = "Dummy Clock";
-    AUDIO_MIXER.getMixerOutputItem(1)->samplerate = 48000;
-    AUDIO_MIXER.getMixerOutputItem(1)->channels = 2;
-    AUDIO_MIXER.getMixerOutputItem(1)->Resampler.init(AUDIO_MIXER.master_samplerate,48000,2,2,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
-
-
-    isauxDummyTimerRunning = true;
-    auxdummyTimerThread = std::thread(&CAudio::startAuxDummyTimer, this);
-*/
-    return true;
-}
-
 bool CAudio::startTrashDummy() {
     std::lock_guard<std::mutex> lock(audioMutex);
 
@@ -209,46 +188,6 @@ bool CAudio::startTrashDummy() {
     return true;
 }
 
-bool CAudio::startMasterDummy() {
-    std::lock_guard<std::mutex> lock(audioMutex);
-    DEJAVISUI_LOG_INFO("[AUDIO] Starting MASTER Dummy Clock");
-    dummy = true;
-
-    ismasterDummyTimerRunning = true;
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = -1;
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = "Dummy Clock";
-    AUDIO_MIXER.getMixerOutputItem(0)->Resampler.init(AUDIO_MIXER.master_samplerate,48000,2,2,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
-
-    masterdummyTimerThread = std::thread(&CAudio::startMasterDummyTimer, this);
-
-    return true;
-
-}
-
-void precise_sleep(std::chrono::microseconds duration) {
-    auto start = std::chrono::high_resolution_clock::now();
-
-    // 1. Sospensione software per la maggior parte del tempo
-    // Lasciamo un margine di 2 millisecondi (2000 microsecondi) per evitare che il OS sfori
-    if (duration > std::chrono::microseconds(2000)) {
-        std::this_thread::sleep_for(duration - std::chrono::microseconds(2000));
-    }
-
-    // 2. Ciclo di controllo attivo (Busy-Wait) per la massima precisione finale
-    while (std::chrono::high_resolution_clock::now() - start < duration) {
-        // Rilascia i cicli della CPU per un istante senza cedere il controllo all'OS scheduler
-#if defined(_MSC_VER)
-        __nop();
-#elif defined(__GNUC__) || defined(__clang__)
-        asm volatile("nop");
-#endif
-    }
-}
-
-void CAudio::startAuxDummyTimer() {
-
-
-}
 
 void CAudio::startTrashTimer() {
     const int64_t sampleRate = AUDIO_MIXER.master_samplerate;;
@@ -273,64 +212,6 @@ void CAudio::startTrashTimer() {
     }
 
 }
-
-void CAudio::startMasterDummyTimer() {
-    const int64_t sampleRate = AUDIO_MIXER.master_samplerate;;
-    const int channels = 2;
-    const size_t chunkSize = 256;
-
-    std::vector<float> buffer(chunkSize);
-
-    const int64_t usecPerChunk = (1000000 * (chunkSize)) / sampleRate;
-
-    auto nextTick = std::chrono::steady_clock::now();
-
-    while (ismasterDummyTimerRunning) {
-        if (AUDIO_MIXER.GetMasterBuffer()->getAvailableRead() >= chunkSize) {
-
-            AUDIO_MIXER.GetMasterBuffer()->read(buffer.data(), chunkSize);
-
-            nextTick += std::chrono::microseconds(usecPerChunk);
-            std::this_thread::sleep_until(nextTick);
-
-            masterdummyTimer.update();
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            nextTick = std::chrono::steady_clock::now();
-            masterdummyTimer.update();
-        }
-    }
-}
-
-/*
-bool CAudio::startMasterOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
-
-    if (AUDIO_MIXER.getMixerOutputItem(0)->isdummy) {
-        AUDIO_MIXER.getMixerOutputItem(1)->dev_audio_out.removeInputBuffer(AUDIO_MIXER.getMixerOutputItem(0)->buffer.get());
-    }
-
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = deviceId;
-
-
-    AUDIO_MIXER.getMixerOutputItem(0)->channels = _channels;
-    AUDIO_MIXER.getMixerOutputItem(0)->samplerate = _samplerate;
-
-    AUDIO_MIXER.getMixerOutputItem(0)->Resampler.init(AUDIO_MIXER.master_samplerate,_samplerate,2,_channels,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
-
-
-    AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.addInputBuffer(AUDIO_MIXER.getMixerOutputItem(0)->buffer.get());
-    AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.setMasterOutputBuffer(AUDIO_MIXER.getMixerOutputItem(0)->buffer.get());
-
-
-    bool initok =  AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.InitHW(deviceId,_channels,_samplerate);
-
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = AUDIO_MIXER.getMixerOutputItem(0)->dev_audio_out.name;
-
-
-    return initok;
-
-}
-*/
 
 bool CAudio::startAuxOutput(int deviceId,uint32_t _channels,uint32_t _samplerate) {
 
@@ -604,73 +485,12 @@ void CAudio::stop() {
         processingThread.join();
     }
 
-    stopMasterOut();
-
-    if (ismasterDummyTimerRunning) {
-
-    }
-
 }
-
-
-void CAudio::stopMasterOut() {
-	//std::lock_guard<std::mutex> lock(audioMutex);
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_id = -1;
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = "";
-    if (ismasterDummyTimerRunning) {
-        ismasterDummyTimerRunning = false;
-        if (masterdummyTimerThread.joinable()) {
-            masterdummyTimerThread.join();
-        }
-    }
-    if (outputStream) {
-        Pa_StopStream(outputStream);
-        Pa_CloseStream(outputStream);
-        outputStream = nullptr;
-    }
-    AUDIO_MIXER.getMixerOutputItem(0)->Resampler.cleanup();
-	AUDIO_MIXER.getMixerOutputItem(0)->buffer->reset();
-
-    DEJAVISUI_LOG_DEBUG("STOPPED MASTER OUT");
-    activeOutputId = -1;
-
-}
-
-void CAudio::stopAuxOut() {
-    //std::lock_guard<std::mutex> lock(audioMutex);
-    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_id = -1;
-    AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name = "";
-    if (isauxDummyTimerRunning) {
-        isauxDummyTimerRunning = false;
-        if (auxdummyTimerThread.joinable()) {
-            auxdummyTimerThread.join();
-        }
-    }
-
-    DEJAVISUI_LOG_DEBUG("STOPPING AUX OUT");
-    if (auxoutputStream) {
-        Pa_StopStream(auxoutputStream);
-        Pa_CloseStream(auxoutputStream);
-        auxoutputStream = nullptr;
-    }
-
-    AUDIO_MIXER.getMixerOutputItem(1)->Resampler.cleanup();
-    AUDIO_MIXER.getMixerOutputItem(1)->buffer->reset();
-
-    DEJAVISUI_LOG_DEBUG("STOPPED AUX OUT");
-
-
-}
-
 
 CAudio::~CAudio() {
 	if (inputStream) {
         Pa_StopStream(inputStream);
         Pa_CloseStream(inputStream);
-    }
-    if (outputStream) {
-        Pa_StopStream(outputStream);
-        Pa_CloseStream(outputStream);
     }
     Pa_Terminate();
 }

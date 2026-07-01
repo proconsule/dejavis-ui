@@ -406,11 +406,11 @@ void cimage_viewer::TransitionImageLayout_SingleCMD(VulkanContext* ctx, VkImage 
 void cimage_viewer::CleanupTexture(VulkanTexture& tex) {
 
     vkDeviceWaitIdle(m_ctx->device);
-
+/*
     if (tex.descriptorSet != VK_NULL_HANDLE) {
         vkFreeDescriptorSets(m_ctx->device, m_ctx->descriptorPool, 1, &tex.descriptorSet);
     }
-
+*/
     if (tex.sampler != VK_NULL_HANDLE) {
         vkDestroySampler(m_ctx->device, tex.sampler, nullptr);
     }

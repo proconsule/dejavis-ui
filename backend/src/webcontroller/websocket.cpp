@@ -128,13 +128,6 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			Audio->m_penedingAudioDevLoad.shouldLoad.store(true);
 
 		}
-		if (json["msgid"] == 53) {
-			//Audio->stopMixerInput(1);
-		}
-		if (json["msgid"] == 54) {
-			Audio->stopMasterOut();
-            Audio->startMasterDummy();
-		}
 
         if (json["msgid"] == 200) {
             Renderer->reinit_gpuidx = json["gpu_id"].asUInt();
@@ -764,13 +757,6 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			Renderer->m_pendingNDI_Unload.isvideomixer = true;
 			Renderer->m_pendingNDI_Unload.shouldUnLoad.store(true);
 
-		}
-
-		if (json["command"].asString() == "stop_input_audio") {
-			//Audio->stopMixerInput(1);
-		}
-		if (json["command"].asString() == "stop_output_audio") {
-			m_cunimixer->audio_ref->stopMasterOut();
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_IMAGE_UNLOAD) {

@@ -3,6 +3,9 @@
 #include "imgui_impl_vulkan.h"
 #include "imgui_impl_glfw.h"
 
+static float imgui_welcome_timerNotify = 5.0f;
+static const char* imgui_welcome_msg = "Welcome to dejavis-ui";
+
 bool CRenderer::InitImGuiDescriptorPool() {
     VkDescriptorPoolSize pool_sizes[] = {
         { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
@@ -42,17 +45,11 @@ void CRenderer::Init_ImGui() {
     io.IniFilename = nullptr;
     ImGui::StyleColorsDark();
 
-
-
-
-
-    // 1. Caricamento Funzioni (Corretto)
     auto loader = [](const char* name, void* user_data) -> PFN_vkVoidFunction {
         return vkGetInstanceProcAddr((VkInstance)user_data, name);
     };
     ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_0, loader, (void*)m_ctx.instance);
 
-    // 2. Inizializzazione Backend
     ImGui_ImplGlfw_InitForVulkan(glfw_window, true);
 
 
@@ -82,14 +79,12 @@ void CRenderer::Init_ImGui() {
 #ifdef __APPLE__
     io.Fonts->AddFontFromFileTTF("../Resources/font.ttf", 24.0f);
     fontMarquee = io.Fonts->AddFontFromFileTTF("../Resources/font.ttf", 34.0f);
-
+    fontBig = io.Fonts->AddFontFromFileTTF("../Resources/font.ttf", 54.0f);
 #else
     io.Fonts->AddFontFromFileTTF("font.ttf", 24.0f);
     fontMarquee = io.Fonts->AddFontFromFileTTF("font.ttf", 34.0f);
-
+    fontBig = io.Fonts->AddFontFromFileTTF("font.ttf", 54.0f);
 #endif
-
-
     DEJAVISUI_LOG_DEBUG("Finished initializing ImGui Vulkan backend");
 }
 
@@ -109,28 +104,21 @@ void CRenderer::GUI_Marquee(std::string _id,ImVec2 pos, std::string text, int fo
 
     float availableWidth = windowWidth - 40.0f; // Padding laterale di 20px per parte
 
-    // --- CASO 1: Il testo ci sta tutto -> Centrato ---
     if (textWidth <= availableWidth) {
         float centerX = (windowWidth - textWidth) * 0.5f;
         ImGui::SetCursorPosX(centerX);
         ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.8f), "%s", marqueeText);
-    }
-    // --- CASO 2: Il testo sfora -> Ping-Pong ---
-    else {
+    } else {
         static float timer = 0.0f;
-        float speed = 0.5f; // Velocità dell'oscillazione (più basso = più lento)
-        float pauseTime = 1.0f; // Pausa ai bordi in secondi
+        float speed = 0.5f;
+        float pauseTime = 1.0f;
 
         timer += ImGui::GetIO().DeltaTime * speed;
 
-        // Calcoliamo lo sfasamento massimo (quanto "esce" il testo)
         float maxScroll = textWidth - availableWidth;
 
-        // Usiamo un triangolo d'onda per il ping-pong (valore tra 0 e 1)
-        // Aggiungiamo una pausa ai bordi usando un clamp sul seno o un modulo
         float pingPong = (sinf(ImGui::GetTime() * speed) * 0.5f) + 0.5f;
 
-        // Applichiamo un pizzico di "smooth step" per rendere il cambio direzione meno brusco
         float smoothPingPong = pingPong * pingPong * (3.0f - 2.0f * pingPong);
 
         float scrollX = 20.0f - (maxScroll * smoothPingPong);
@@ -143,59 +131,68 @@ void CRenderer::GUI_Marquee(std::string _id,ImVec2 pos, std::string text, int fo
     ImGui::PopFont();
 }
 
-void CRenderer::GUI_Render() {
-    // CLEAR
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // Sfondo 0 alpha
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);    // Niente bordi
+void CRenderer::ImGui_Welcome_Message() {
 
-
-    auto& cur = m_master_per_frame[m_display.currentFrame];
-
-    // 3. Posiziona il testo
-    ImGui::SetNextWindowPos(ImVec2(20, 20));
-    ImGui::Begin("HUD", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs);
-
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.8f, 1.0f), "DEJAVIS ENGINE ACTIVE");
-    ImGui::Separator();
-    ImGui::Text("Mixer Samplerate: %u Hz", m_audio->AUDIO_MIXER.master_samplerate);
-    // Qui puoi aggiungere i dati del tuo mixer o del resampler
-    ImGui::End();
-    // --- MARQUEE BASSO ---
-    float windowWidth = (float)cur.image.width;
-    float windowHeight = (float)cur.image.height;
-
-    // Posizioniamo la barra in basso (es. 40 pixel dal fondo)
-/*
-    if (!m_audio->getAudioDecoder()->GetMetadata().title.empty()) {
-            ImGui::GetBackgroundDrawList()->AddRectFilled(
-        ImVec2(20, windowHeight - 115),
-        ImVec2(windowWidth-20, windowHeight - 25),
-        IM_COL32(0, 0, 0, 150) // Verde semi-trasparente
-    );
-        GUI_Marquee("marq1",ImVec2(0, windowHeight - 110),m_audio->getAudioDecoder()->GetMetadata().artist);
-        GUI_Marquee("marq2", ImVec2(0, windowHeight - 80),m_audio->getAudioDecoder()->GetMetadata().title);
-    }else {
-        GUI_Marquee("marq1",ImVec2(0, windowHeight - 150),m_audio->getAudioDecoder()->getCurrentFilename());
+    if (imgui_welcome_timerNotify <= 0.0f) {
+        return;
     }
-*/
 
+    float alpha = 1.0f;
+    float tempo_dissolvenza = 1.5f;
+    if (imgui_welcome_timerNotify < tempo_dissolvenza) {
+        alpha = imgui_welcome_timerNotify / tempo_dissolvenza;
+        videoMixerTextures[0].alpha = 1.0f - alpha;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+    ImVec2 textSize = ImGui::CalcTextSize(imgui_welcome_msg);
+
+    ImVec2 screen_size = ImGui::GetIO().DisplaySize;
+    ImVec2 center_pos = ImVec2(core_w*0.5, core_h * 0.5f);
+
+    ImGui::SetNextWindowPos(center_pos, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+
+    ImGui::Begin("##Welcome", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoScrollbar);
+    ImGui::PushFont(fontBig);
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, alpha), "%s", imgui_welcome_msg);
+    ImGui::Separator();
+    ImGui::PopFont();
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, alpha), "GPU: %s", activeGPUname.c_str());
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, alpha), "Master Audio Device: %s %d KHz", m_audio->AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name.c_str(),m_audio->AUDIO_MIXER.getMixerOutputItem(1)->samplerate);
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, alpha), "Aux Audio Device: %s %d KHz", m_audio->AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name.c_str(),m_audio->AUDIO_MIXER.getMixerOutputItem(1)->samplerate);
+
+    imgui_welcome_timerNotify -= ImGui::GetIO().DeltaTime;
+    
+    ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 
+    if (imgui_welcome_timerNotify <= 0.0f) {
+        imgui_welcome_timerNotify = 0.0f;
+        videoMixerTextures[0].alpha = 1.0f;
+    }
 
 }
 
 
+void CRenderer::GUI_Render() {
 
+    ImGui_Welcome_Message();
+
+}
 
 void CRenderer::ImGui_Render() {
-    // 1. Inizia il frame ImGui
+
+
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
     GUI_Render();
 
-    // 4. Genera i dati per Vulkan
     ImGui::Render();
 }

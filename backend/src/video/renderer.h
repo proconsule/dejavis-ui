@@ -340,6 +340,8 @@ public:
 
 	Vulkan_DisplayContext m_display;
 
+	std::string activeGPUname = "";
+
     VkShaderModule CreateShaderModule(const uint32_t* code, size_t sizeInBytes);
 
 	void Render();
@@ -350,10 +352,13 @@ public:
     void GUI_Render();
 
     ImFont* fontMarquee;
+	ImFont* fontBig;
 
     void GUI_Marquee(std::string _id,ImVec2 pos,std::string text,int font_size = 16);
 
-    VkDescriptorPool imguiPool;
+	void ImGui_Welcome_Message();
+
+	VkDescriptorPool imguiPool;
 
     projectm_handle _projectM{nullptr};
     projectm_playlist_handle _playlist{nullptr};

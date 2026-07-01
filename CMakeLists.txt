@@ -502,12 +502,12 @@ endif()
 set(SPOUT2_SDK_PATH "" CACHE PATH "Path to Spout2 SDK root folder")
 
 if(SPOUT2_SDK_PATH AND WIN32)
-    set(spout2_DIR "${SPOUT2_SDK_PATH}/")
+    set(spout2_DIR "${SPOUT2_SDK_PATH}/lib/cmake/spout2")
     find_package(spout2 REQUIRED)
 
     add_definitions(-DSPOUT_IMPORT_DLL)
     target_compile_definitions(dejavis-ui PRIVATE USE_SPOUT)
-    target_link_libraries(dejavis-ui PRIVATE Spout2::SpoutDX)
+    target_link_libraries(dejavis-ui PRIVATE Spout2::Spout )
     target_sources(dejavis-ui PRIVATE
         backend/src/SpoutVK.cpp
         backend/src/video/renderer_spout2.cpp

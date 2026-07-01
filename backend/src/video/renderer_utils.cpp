@@ -355,11 +355,8 @@ void CRenderer::CleanupTexture(VulkanTexture& tex) {
 
     vkDeviceWaitIdle(m_ctx.device);
 
-    // 2. Ora procedi con la distruzione (ordine inverso)
     if (tex.descriptorSet != VK_NULL_HANDLE) {
-        // Nota: Spesso i descriptor si resettano col pool,
-        // ma se li hai allocati singolarmente:
-        // vkFreeDescriptorSets(device, descriptorPool, 1, &tex.descriptorSet);
+         vkFreeDescriptorSets(m_ctx.device, m_ctx.descriptorPool, 1, &tex.descriptorSet);
     }
 
     if (tex.sampler != VK_NULL_HANDLE) {
@@ -377,7 +374,7 @@ void CRenderer::CleanupTexture(VulkanTexture& tex) {
     if (tex.memory != VK_NULL_HANDLE) {
         vkFreeMemory(m_ctx.device, tex.memory, nullptr);
     }
-    // 3. Opzionale: azzera la struct per evitare "double free"
+
     tex = VulkanTexture{};
 }
 

@@ -252,9 +252,10 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     core_w = _core_w;
     core_h = _core_h;
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 10; i++) {
         videoMixerTextures[i].originalIdx = i;
-
+    }
+    videoMixerTextures[0].alpha = 0.0f; //FOR WELCOME FADE
     m_ctx.physicalDevice = gpu_list[gpuidx].physicalDevice;
 
     VkPhysicalDeviceProperties properties;
@@ -262,10 +263,11 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     m_ctx.isNVIDIA = (properties.vendorID == VENDOR_ID_NVIDIA);
 
 
+
     DEJAVISUI_LOG_INFO("[CORE] GPU Detected (Vendor ID: 0x%04X): %s",
                        properties.vendorID, properties.deviceName);
 
-
+    activeGPUname = properties.deviceName;
     if (!m_ctx.physicalDevice) return false;
 
     // --- 1. Trova queue families ---

@@ -166,7 +166,7 @@ void CRenderer::ImGui_Welcome_Message() {
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, alpha), "Aux Audio Device: %s %d KHz", m_audio->AUDIO_MIXER.getMixerOutputItem(1)->audio_dev_name.c_str(),m_audio->AUDIO_MIXER.getMixerOutputItem(1)->samplerate);
 
     imgui_welcome_timerNotify -= ImGui::GetIO().DeltaTime;
-    
+
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();

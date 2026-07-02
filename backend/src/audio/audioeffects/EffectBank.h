@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <memory>
+#include <shared_mutex>
 #include <vector>
 #include <json/value.h>
 
@@ -93,7 +94,8 @@ namespace audio_utils {
         struct Slot {
             bool                            active   = false;
             SlotConfig                      lastCfg;
-            std::atomic<std::shared_ptr<EffectChain>> chain{nullptr};
+            std::shared_ptr<EffectChain>    chain{nullptr};
+            mutable std::shared_mutex       chainMutex;
             std::atomic<float>              preLevelL{0.0f};
             std::atomic<float>              preLevelR{0.0f};
             std::atomic<float>              postLevelL{0.0f};

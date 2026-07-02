@@ -50,3 +50,7 @@ Library used:
 Thanks to: 
 
 - a very special tanks goes to Kai Blaschke https://github.com/kblaschke who gave me invaluable advice during the development of dejavis-ui
+
+## License
+dejavis-ui is released under the BSD 3-Clause License.
+See the [LICENSE](LICENSE) file for more details.

@@ -31,6 +31,9 @@ set(DIST_DIR "${CMAKE_BINARY_DIR}/dist-${TARGET_ARCH}")
 # =============================================================================
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 add_compile_definitions(__STDC_CONSTANT_MACROS)
@@ -692,4 +695,15 @@ add_custom_command(
         "${CMAKE_CURRENT_BINARY_DIR}/webpages"
         "${DIST_DIR}/webpages"
         COMMENT "Copy web pages to ${DIST_DIR}/webpages directory\n"
+)
+
+add_custom_command(
+        TARGET dejavis-ui POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        "${DIST_DIR}/LICENSE"
+        COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_CURRENT_SOURCE_DIR}/CREDITS.txt"
+        "${DIST_DIR}/CREDITS.txt"
+        COMMENT "Copy license files to ${DIST_DIR}\n"
 )

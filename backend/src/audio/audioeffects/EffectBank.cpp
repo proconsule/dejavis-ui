@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <shared_mutex>
 #include <json/value.h>
 
 #include "backend/src/logger.h"
@@ -78,14 +79,16 @@ namespace audio_utils {
             return -1;
         }
 
-        auto oldChain = s.chain.load(std::memory_order_relaxed);
         auto newChain = std::make_shared<EffectChain>();
-        if (oldChain) {
-            newChain->effects = oldChain->effects;
+        {
+            std::unique_lock lock(s.chainMutex);
+            if (s.chain) {
+                newChain->effects = s.chain->effects;
+            }
+            newChain->effects.push_back(effect);
+            s.chain = newChain; // Assegnazione protetta dal lock
         }
-        newChain->effects.push_back(effect);
 
-        s.chain.store(newChain, std::memory_order_release);
         applyDecayConstant(s, cfg);
         s.active = true;
         return slotId;
@@ -95,14 +98,14 @@ namespace audio_utils {
         if (!validSlot(slotId)) return;
         Slot& s = *slots_[slotId];
 
-        auto oldChain = s.chain.load(std::memory_order_relaxed);
-        if (!oldChain || effectIndex >= oldChain->effects.size()) return;
+        std::unique_lock lock(s.chainMutex);
+        if (!s.chain || effectIndex >= s.chain->effects.size()) return;
 
         auto newChain = std::make_shared<EffectChain>();
-        newChain->effects = oldChain->effects;
+        newChain->effects = s.chain->effects;
         newChain->effects.erase(newChain->effects.begin() + effectIndex);
 
-        s.chain.store(newChain, std::memory_order_release);
+        s.chain = newChain;
         if (newChain->effects.empty()) s.active = false;
     }
 
@@ -139,9 +142,14 @@ namespace audio_utils {
     void EffectBank::FreeSlot(int slotId) {
         if (slotId < 0 || static_cast<size_t>(slotId) >= slots_.size()) return;
         Slot& s = *slots_[slotId];
+
+        {
+            std::unique_lock lock(s.chainMutex);
+            s.chain = nullptr;
+        }
+
         s.active = false;
         s.lastCfg = SlotConfig{};
-        s.chain.store(nullptr, std::memory_order_release);
         s.preLevelL .store(0.0f, std::memory_order_relaxed);
         s.preLevelR .store(0.0f, std::memory_order_relaxed);
         s.postLevelL.store(0.0f, std::memory_order_relaxed);
@@ -152,7 +160,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        auto oldChain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> oldChain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            oldChain = s.chain;
+        }
         if (!oldChain || effectIndex >= oldChain->effects.size()) return false;
 
         // Creiamo una nuova catena per non modificare quella in uso dal thread audio
@@ -185,8 +197,15 @@ namespace audio_utils {
             return false;
         }
 
-        newChain->effects[effectIndex] = newEffect;
-        s.chain.store(newChain, std::memory_order_release);
+        {
+            std::unique_lock lock(s.chainMutex);
+            if (!s.chain || effectIndex >= s.chain->effects.size()) return false;
+
+            auto newChain = std::make_shared<EffectChain>();
+            newChain->effects = s.chain->effects;
+            newChain->effects[effectIndex] = newEffect;
+            s.chain = newChain;
+        }
 
         s.lastCfg = cfg;
         applyDecayConstant(s, cfg);
@@ -197,7 +216,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        auto chain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         if (!chain) return false;
 
         for (size_t i = 0; i < chain->effects.size(); ++i) {
@@ -216,7 +239,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        auto chain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         if (!chain) return false;
 
         for (size_t i = 0; i < chain->effects.size(); ++i) {
@@ -235,7 +262,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        auto chain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         if (!chain) return false;
 
         for (size_t i = 0; i < chain->effects.size(); ++i) {
@@ -254,7 +285,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        auto chain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         if (!chain) return false;
 
         for (size_t i = 0; i < chain->effects.size(); ++i) {
@@ -273,7 +308,11 @@ namespace audio_utils {
         if (!validSlot(slotId)) return false;
         Slot& s = *slots_[slotId];
 
-        auto chain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         if (!chain) return false;
 
         for (size_t i = 0; i < chain->effects.size(); ++i) {
@@ -296,7 +335,14 @@ namespace audio_utils {
 
     int EffectBank::GetLatencyFrames(int slotId) const {
         if (!validSlot(slotId)) return 0;
-        auto chain = slots_[slotId]->chain.load(std::memory_order_acquire);
+
+        Slot& s = *slots_[slotId];
+
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         if (!chain) return 0;
         int totalLatency = 0;
         for (const auto& eff : chain->effects) {
@@ -309,7 +355,11 @@ namespace audio_utils {
         if (!validSlot(slotId) || inOut == nullptr || numFrames == 0) return;
         Slot& slot = *slots_[slotId];
 
-        auto chain = slot.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(slot.chainMutex);
+            chain = slot.chain;
+        }
         if (!chain) return;
 
         if (pre_gain != 1.0f) {
@@ -344,7 +394,11 @@ namespace audio_utils {
         if (!validSlot(slotId) || left == nullptr || right == nullptr || numFrames == 0) return;
         Slot& slot = *slots_[slotId];
 
-        auto chain = slot.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(slot.chainMutex);
+            chain = slot.chain;
+        }
         if (!chain) return;
 
         if (pre_gain != 1.0f) {
@@ -421,7 +475,11 @@ namespace audio_utils {
         root["active"] = s.active;
         root["meterDecaySec"] = s.lastCfg.meterDecaySec;
 
-        auto chain = s.chain.load(std::memory_order_acquire);
+        std::shared_ptr<EffectChain> chain;
+        {
+            std::shared_lock lock(s.chainMutex);
+            chain = s.chain;
+        }
         Json::Value effectsArray(Json::arrayValue);
         if (chain) {
             for (const auto& eff : chain->effects) {

@@ -438,12 +438,12 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     vkGetPhysicalDeviceFeatures2(m_ctx.physicalDevice, &m_ctx.deviceFeatures2);
 
     // 3. Abilita esplicitamente ciò che serve dentro le struct corrette
-    m_ctx.features12.hostQueryReset = VK_TRUE;               // Sostituisce hostQueryResetFeatures
-    m_ctx.features12.storageBuffer8BitAccess = VK_TRUE;      // Sostituisce eightBitFeatures
+    m_ctx.features12.hostQueryReset = VK_TRUE;
+    m_ctx.features12.storageBuffer8BitAccess = VK_TRUE;
     m_ctx.features12.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-    m_ctx.features12.timelineSemaphore = VK_TRUE;            // Essenziale per libplacebo
+    m_ctx.features12.timelineSemaphore = VK_TRUE;
 
-    m_ctx.sync2Features.synchronization2 = VK_TRUE;          // Abilita Sync2
+    m_ctx.sync2Features.synchronization2 = VK_TRUE;
     m_ctx.deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
     if (encMaint1)
         m_ctx.videoMaint1.videoMaintenance1 = VK_TRUE;

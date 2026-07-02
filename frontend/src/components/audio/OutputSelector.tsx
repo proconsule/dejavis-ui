@@ -66,7 +66,7 @@ export const OutputSelectorDialog = ({ idx }: OutputSelectorProps) => {
     }, [lastJsonMessage]);
 
     const handleSelectInternal = (type: 0 | 1) => {
-        sendMessage({ msgid: 7000, type, outputidx: idx, devid: -1 });
+        sendMessage({ msgid: 7000, type: type, outputidx: idx, devid: -1 });
         setIsOpen(false);
     };
 

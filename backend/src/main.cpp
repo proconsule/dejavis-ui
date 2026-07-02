@@ -121,7 +121,8 @@ int main(int argc, char* argv[]) {
 
     Audio.m_penedingAudioDevLoad.deviceid = Audio.getDefaultOutput();
     Audio.m_penedingAudioDevLoad.samplerate = 48000;
-    Audio.m_penedingAudioDevLoad.outputtype = 0;
+    Audio.m_penedingAudioDevLoad.outputtype = 1;
+    Audio.m_penedingAudioDevLoad.outidx = CAUDIO_MIXER::OUTPUT_MASTER;
     Audio.m_penedingAudioDevLoad.channels = 2;
     Audio.m_penedingAudioDevLoad.shouldLoad.store(true);
 

@@ -37,6 +37,7 @@ struct PendingAudioOutDevLoad {
 	std::atomic<bool> shouldLoad{false};
 	int deviceid = -1;
 	int outputtype = -1;
+	CAUDIO_MIXER::MIXER_OUTPUTS outidx;
 	int samplerate = 48000;
 	int channels = 2;
 

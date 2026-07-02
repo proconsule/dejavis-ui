@@ -357,6 +357,7 @@ bool CAudio::StartAudioDev(CAUDIO_MIXER::MIXER_OUTPUTS outputnum,int deviceId,ui
 
     if (AUDIO_MIXER.getMixerOutputItem(outdevidx)->isdummy) {
         AUDIO_MIXER.getMixerOutputItem(dummyclock_idx)->dev_audio_out.removeInputBuffer(AUDIO_MIXER.getMixerOutputItem(outdevidx)->buffer.get());
+        AUDIO_MIXER.getMixerOutputItem(outdevidx)->isdummy = false;
     }
 
     AUDIO_MIXER.getMixerOutputItem(outdevidx)->audio_dev_id = deviceId;
@@ -374,7 +375,7 @@ bool CAudio::StartAudioDev(CAUDIO_MIXER::MIXER_OUTPUTS outputnum,int deviceId,ui
 
     bool initok =  AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.InitHW(deviceId,_channels,_samplerate);
 
-    AUDIO_MIXER.getMixerOutputItem(0)->audio_dev_name = AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.name;
+    AUDIO_MIXER.getMixerOutputItem(outdevidx)->audio_dev_name = AUDIO_MIXER.getMixerOutputItem(outdevidx)->dev_audio_out.name;
 
     return initok;
 }
@@ -385,6 +386,7 @@ bool CAudio::StartDummyDevice(CAUDIO_MIXER::MIXER_OUTPUTS outputnum,CAUDIO_MIXER
     AUDIO_MIXER.getMixerOutputItem(outputnum)->audio_dev_name = "Dummy Clock";
     AUDIO_MIXER.getMixerOutputItem(outputnum)->samplerate = AUDIO_MIXER.getMixerOutputItem(master_clocknum)->samplerate;
     AUDIO_MIXER.getMixerOutputItem(outputnum)->channels = 2;
+    AUDIO_MIXER.getMixerOutputItem(outputnum)->isdummy = true;
     AUDIO_MIXER.getMixerOutputItem(outputnum)->Resampler.init(AUDIO_MIXER.master_samplerate,AUDIO_MIXER.getMixerOutputItem(outputnum)->samplerate,2,2,AV_SAMPLE_FMT_FLTP,AV_SAMPLE_FMT_FLT);
 
 
@@ -407,9 +409,9 @@ void CAudio::processingLoop() {
 
         if (m_penedingAudioDevLoad.shouldLoad.load()) {
             m_penedingAudioDevLoad.shouldLoad.store(false);
-            if (m_penedingAudioDevLoad.outputtype == 0) {
+            if (m_penedingAudioDevLoad.outputtype == 1) {
 
-                StartAudioDev(CAUDIO_MIXER::OUTPUT_MASTER,m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
+                StartAudioDev(m_penedingAudioDevLoad.outidx,m_penedingAudioDevLoad.deviceid,m_penedingAudioDevLoad.channels,m_penedingAudioDevLoad.samplerate);
 
             }
         }

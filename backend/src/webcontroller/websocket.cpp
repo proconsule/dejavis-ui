@@ -669,8 +669,9 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			uint32_t channels = json["channels"].asUInt();
 			uint32_t samplerate = json["samplerate"].asUInt();
 			m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid = deviceId;
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.outputtype = 0;
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.outputtype = mytype;
 			if (mytype == 0 ) m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid == -1;
+			m_cunimixer->audio_ref->m_penedingAudioDevLoad.outidx = (CAUDIO_MIXER::MIXER_OUTPUTS)myidx;
 			m_cunimixer->audio_ref->m_penedingAudioDevLoad.samplerate = samplerate;
 			m_cunimixer->audio_ref->m_penedingAudioDevLoad.channels = channels;
 			m_cunimixer->audio_ref->m_penedingAudioDevLoad.shouldLoad.store(true);

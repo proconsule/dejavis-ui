@@ -2,6 +2,8 @@
 #include "logger.h"
 #include <cstring>
 
+#include "video/vulkan_utils.h"
+
 CNDISender::CNDISender() {
     NDIlib_initialize();
 }
@@ -71,6 +73,8 @@ void CNDISender::submitSlot(RGB2YUVSlotResources* slot, int64_t pts_us) {
     m_queue_cv.notify_one();
 }
 
+/*
+
 static uint32_t ndiFindMemoryType(VulkanContext* ctx, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     // 1. Interroga la GPU per ottenere l'elenco di tutti i tipi di memoria disponibili
     VkPhysicalDeviceMemoryProperties memProps;
@@ -89,6 +93,8 @@ static uint32_t ndiFindMemoryType(VulkanContext* ctx, uint32_t typeFilter, VkMem
     // Se non troviamo nulla, restituiamo un valore sentinella
     return UINT32_MAX;
 }
+
+*/
 
 bool CNDISender::Init_VideoAudio(VulkanContext* ctx, std::string channelName, int w, int h, int audioSR, int audioCh) {
     m_ctx = ctx;
@@ -256,9 +262,7 @@ void CNDISender::createReadbackBuffer(uint32_t w, uint32_t h) {
         VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
         allocInfo.allocationSize = memReqs.size;
 
-        // 3. TROVARE LA MEMORIA CORRETTA
-        // Importante: Deve essere HOST_VISIBLE (per mappare) e COHERENT (per non dover fare il flush manuale)
-        allocInfo.memoryTypeIndex = ndiFindMemoryType(m_ctx, memReqs.memoryTypeBits,
+        allocInfo.memoryTypeIndex = FindMemoryType(m_ctx, memReqs.memoryTypeBits,
                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
         if (vkAllocateMemory(m_ctx->device, &allocInfo, nullptr, &m_readback[i].memory) != VK_SUCCESS) {

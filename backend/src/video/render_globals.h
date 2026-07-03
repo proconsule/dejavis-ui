@@ -239,7 +239,7 @@ struct VulkanContext {
     std::vector<VkCommandBuffer> commandBuffers;
     VkDescriptorPool descriptorPool{VK_NULL_HANDLE};
     VkSampler defaultSampler = VK_NULL_HANDLE;
-
+    VkSampler cubicSampler = VK_NULL_HANDLE;
 
 
     //Mixer

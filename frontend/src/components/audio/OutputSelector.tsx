@@ -87,7 +87,7 @@ export const OutputSelectorDialog = ({ idx }: OutputSelectorProps) => {
         sendMessage({
             msgid: 7000,
             type: 1,
-            outputidx: idx, // Nota: corretto in outputidx per coerenza col componente
+            outputidx: idx,
             devid: configuredDevices.deviceId,
             samplerate: configuredDevices.sampleRate,
             channels: configuredDevices.channels

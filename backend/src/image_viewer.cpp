@@ -522,10 +522,11 @@ bool cimage_viewer::LoadFile(const std::string &_path) {
     if (!m_video_ctx) return false;
 
 
-    //int w = m_video_ctx->width;
-    //int h = m_video_ctx->height;
-
-    //ExtractMetadataFromContexts();
+    if (m_fmt_ctx && m_fmt_ctx->iformat) {
+        curr_format = m_fmt_ctx->iformat->name;
+    } else {
+        curr_format = "unknown";
+    }
 
     return true;
 }
@@ -537,5 +538,6 @@ Json::Value cimage_viewer::getJsonStatus() {
     root["width"] = img_width;
     root["height"] = img_height;
     root["filename"] = curr_filename;
+    root["format"] = curr_format;
     return root;
 }

@@ -174,8 +174,10 @@ export function useWebRTCPreview(opts: UsePreviewOptions = {}) {
         const handle = async () => {
             try {
                 if (msg.payload.type === 'answer' && msg.payload.sdp) {
-
-                    if (pc.signalingState === 'stable') return;
+                    if (pc.signalingState !== 'have-local-offer') {
+                        console.warn('[Publisher] Ignorata Answer: signalingState non è have-local-offer, ma:', pc.signalingState);
+                        return;
+                    }
 
                     await pc.setRemoteDescription({
                         type: 'answer',

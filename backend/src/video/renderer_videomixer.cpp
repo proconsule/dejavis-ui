@@ -72,38 +72,29 @@ void main() {
         return;
     }
 
-    ivec2 texSize = textureSize(texSampler, 0);
-    vec2 pixelPos = fragTexCoord * vec2(texSize);
+    vec2 texSize = vec2(textureSize(texSampler, 0));
+    vec2 pixelPos = fragTexCoord * texSize - 0.5;
 
-    // Centro del pixel
-    vec2 fPos = pixelPos;
-    vec2 iPos = floor(fPos);
-    vec2 dist = fPos - iPos;
+    vec2 f = fract(pixelPos);
+    vec2 i = floor(pixelPos);
 
-    vec3 colorSum = vec3(0.0);
-    float weightSum = 0.0;
+    vec2 w0 = 0.5 * f * (f - 1.0) * (f - 2.0);
 
-    for(int i = -1; i <= 2; i++) {
-        for(int j = -1; j <= 2; j++) {
-            ivec2 sampleCoord = ivec2(iPos) + ivec2(i, j);
+    vec2 texelSize = 1.0 / texSize;
 
-            float weight = cubic(dist.x - float(i)) * cubic(dist.y - float(j));
+    vec2 coord1 = (i + vec2(0.5, 0.5)) * texelSize;
+    vec2 coord2 = (i + vec2(1.5, 0.5)) * texelSize;
+    vec2 coord3 = (i + vec2(0.5, 1.5)) * texelSize;
+    vec2 coord4 = (i + vec2(1.5, 1.5)) * texelSize;
 
-            if (sampleCoord.x >= 0 && sampleCoord.x < texSize.x &&
-                sampleCoord.y >= 0 && sampleCoord.y < texSize.y) {
+    vec4 color = texture(texSampler, coord1) * ((1.0 - f.x) * (1.0 - f.y)) +
+                 texture(texSampler, coord2) * (f.x * (1.0 - f.y)) +
+                 texture(texSampler, coord3) * ((1.0 - f.x) * f.y) +
+                 texture(texSampler, coord4) * (f.x * f.y);
 
-                vec4 sampleCol = texelFetch(texSampler, sampleCoord, 0);
-                colorSum += sampleCol.rgb * weight;
-                weightSum += weight;
-            }
-        }
-    }
-
-    vec3 finalRgb = colorSum / max(weightSum, 0.0001);
-    float texAlpha = texture(texSampler, fragTexCoord).a;
-
-    outColor = vec4(finalRgb, texAlpha * fragAlpha);
+    outColor = vec4(color.rgb, color.a * fragAlpha);
 }
+
 )";
 
 // Struct per matchare il Vertex Shader
@@ -985,6 +976,16 @@ Json::Value CRenderer::GetVideoMixerJson() {
             ndi["sources"] = videoinput.ndi_receiver->listSources();
             ndi["status"] = videoinput.ndi_receiver->getJsonStatus();
             item["ndi"] = ndi;
+
+        }
+        if (videoinput.img_viewver!=nullptr) {
+            Json::Value image_viewer_json;
+
+            image_viewer_json["width"] = videoinput.img_viewver->getOutputWidth();
+            image_viewer_json["height"] = videoinput.img_viewver->getOutputHeight();
+            image_viewer_json["filename"] = videoinput.img_viewver->getFileName();
+            image_viewer_json["format"] = videoinput.img_viewver->getFormatName();
+            item["image_viewer"] = image_viewer_json;
 
         }
         list.append(item);

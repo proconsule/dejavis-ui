@@ -14,67 +14,41 @@ layout(push_constant) uniform PC {
     int strideY;
     int strideUV;
     int rangeFull;
-    int colorSpace;   // AVCOL_SPC_*: 1=BT709, 5=BT470BG, 6=SMPTE170M, 9=BT2020_NCL
+    int colorSpace;
     int width;
     int height;
 } pc;
 
-
-uint readU16Y(int byteOfs) {
-    int wordOfs = byteOfs >> 2;
-    int shift   = (byteOfs & 2) * 8;
-    return (dataY[wordOfs] >> shift) & 0xFFFFu;
-}
-uint readU16UV(int byteOfs) {
-    int wordOfs = byteOfs >> 2;
-    int shift   = (byteOfs & 2) * 8;
-    return (dataUV[wordOfs] >> shift) & 0xFFFFu;
-}
-
 vec4 yuv2rgb_10bit(float Y, float U, float V) {
-    float yN, uN, vN;
-    if (pc.rangeFull == 1) {
-        yN =  Y          / 1023.0;
-        uN = (U - 512.0) / 1023.0;
-        vN = (V - 512.0) / 1023.0;
-    } else {
-        // Limited range a 10-bit:
-        //   Y in [64, 940]   range = 876   ( = 219 * 4)
-        //   U/V in [64, 960] range = 896   ( = 224 * 4), zero a 512
-        yN = (Y -  64.0) / 876.0;
-        uN = (U - 512.0) / 896.0;
-        vN = (V - 512.0) / 896.0;
-    }
+    float yN = (pc.rangeFull == 1) ? (Y / 1023.0) : ((Y - 64.0) / 876.0);
+    float uN = (U - 512.0) / ((pc.rangeFull == 1) ? 1023.0 : 896.0);
+    float vN = (V - 512.0) / ((pc.rangeFull == 1) ? 1023.0 : 896.0);
 
-    float r, g, b;
-    if (pc.colorSpace == 9) {              // BT.2020 NCL
-        r = yN + 1.4746   * vN;
-        g = yN - 0.16455  * uN - 0.57135 * vN;
-        b = yN + 1.8814   * uN;
-    } else if (pc.colorSpace == 1) {       // BT.709
-        r = yN + 1.5748   * vN;
-        g = yN - 0.18733  * uN - 0.46812 * vN;
-        b = yN + 1.8556   * uN;
-    } else {                                // BT.601 fallback
-        r = yN + 1.402    * vN;
-        g = yN - 0.344136 * uN - 0.714136 * vN;
-        b = yN + 1.772    * uN;
-    }
-    return vec4(clamp(vec3(r, g, b), 0.0, 1.0), 1.0);
+    vec3 rgb;
+    if (pc.colorSpace == 9)      rgb = vec3(yN + 1.4746 * vN, yN - 0.16455 * uN - 0.57135 * vN, yN + 1.8814 * uN);
+    else if (pc.colorSpace == 1) rgb = vec3(yN + 1.5748 * vN, yN - 0.18733 * uN - 0.46812 * vN, yN + 1.8556 * uN);
+    else                         rgb = vec3(yN + 1.402 * vN, yN - 0.344136 * uN - 0.714136 * vN, yN + 1.772 * uN);
+
+    return vec4(clamp(rgb, 0.0, 1.0), 1.0);
 }
 
 void main() {
     ivec2 px = ivec2(gl_GlobalInvocationID.xy);
     if (px.x >= pc.width || px.y >= pc.height) return;
 
-    int yByteOfs = px.y * pc.strideY + px.x * 2;
-    float Y = float(readU16Y(yByteOfs) >> 6);   // 10-bit nei MSB
+
+    int yIdx = (px.y * pc.strideY + px.x * 2) >> 2;
+    uint yWord = dataY[yIdx];
+    uint yVal = ((px.x & 1) == 0) ? (yWord & 0xFFFFu) : (yWord >> 16);
+    float Y = float(yVal >> 6);
 
     int cx = px.x >> 1;
     int cy = px.y >> 1;
-    int uvByteOfs = cy * pc.strideUV + cx * 4;  // 2 uint16 per coppia
-    float U = float(readU16UV(uvByteOfs    ) >> 6);
-    float V = float(readU16UV(uvByteOfs + 2) >> 6);
+    int uvIdx = (cy * pc.strideUV + cx * 4) >> 2;
+
+    uint uvWord = dataUV[uvIdx]; // Legge sia U che V dallo stesso blocco
+    float U = float((uvWord & 0xFFFFu) >> 6);
+    float V = float((uvWord >> 16) >> 6); // Estrae la seconda metà dello stesso uint
 
     imageStore(outImage, px, yuv2rgb_10bit(Y, U, V));
 }

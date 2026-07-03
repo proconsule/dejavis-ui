@@ -161,6 +161,7 @@ export function useWebRTCPublisher(localStream: MediaStream | null, opts: UsePub
                 if (msg.payload.type === 'answer' && msg.payload.sdp) {
                     if (pc.signalingState === 'stable') return;
 
+                    console.log(msg.payload.sdp);
                     await pc.setRemoteDescription({
                         type: 'answer',
                         sdp: msg.payload.sdp,

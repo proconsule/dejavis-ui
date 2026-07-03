@@ -353,13 +353,16 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
             });
     };
 
-    //std::vector<const char*> devExt = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
+    VkFormatProperties formatProps;
+    vkGetPhysicalDeviceFormatProperties(m_ctx.physicalDevice, VK_FORMAT_R8G8B8A8_UNORM, &formatProps);
 
     m_ctx.devExt.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     m_ctx.devExt.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
     m_ctx.devExt.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
     m_ctx.devExt.push_back(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+
+
 #ifdef _WIN32
 
 
@@ -519,6 +522,7 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     if (!CreateDescriptorPool())                return false;
     if (!CreateDefaultSampler())                return false;
 
+
     CreateStagingResources(core_w, core_h);
 
 
@@ -577,7 +581,7 @@ bool CRenderer::CreateDescriptorPool() {
 bool CRenderer::CreateDefaultSampler() {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR; // Filtro per ingrandimento
+    samplerInfo.magFilter = VK_FILTER_CUBIC_EXT; // Filtro per ingrandimento
     samplerInfo.minFilter = VK_FILTER_LINEAR; // Filtro per rimpicciolimento
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;

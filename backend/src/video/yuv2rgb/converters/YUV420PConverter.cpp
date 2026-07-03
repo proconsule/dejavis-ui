@@ -2,7 +2,8 @@
 #include "../YUVConverterCommon.h"
 #include <cstring>
 
-static const char* kYUV420PShaderGLSL = R"(#version 450 core
+static const char* kYUV420PShaderGLSL = R"(
+#version 450 core
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0, rgba8) uniform writeonly image2D outImage;
@@ -20,47 +21,43 @@ layout(push_constant) uniform PC {
     int height;
 } pc;
 
-float byteY(int ofs) { return float((dataY[ofs >> 2] >> ((ofs & 3) * 8)) & 0xFFu); }
-float byteU(int ofs) { return float((dataU[ofs >> 2] >> ((ofs & 3) * 8)) & 0xFFu); }
-float byteV(int ofs) { return float((dataV[ofs >> 2] >> ((ofs & 3) * 8)) & 0xFFu); }
+uint getByte(uint data, int offset) {
+    return (data >> (offset * 8)) & 0xFFu;
+}
 
 vec4 yuv2rgb(float Y, float U, float V) {
-    float yN, uN, vN;
-    if (pc.rangeFull == 1) {
-        yN = Y / 255.0;
-        uN = (U - 128.0) / 255.0;
-        vN = (V - 128.0) / 255.0;
-    } else {
-        yN = (Y - 16.0)  / 219.0;
-        uN = (U - 128.0) / 224.0;
-        vN = (V - 128.0) / 224.0;
-    }
+    float yN = (pc.rangeFull == 1) ? (Y / 255.0) : ((Y - 16.0) / 219.0);
+    float uN = (U - 128.0) / ((pc.rangeFull == 1) ? 255.0 : 224.0);
+    float vN = (V - 128.0) / ((pc.rangeFull == 1) ? 255.0 : 224.0);
 
-    float r, g, b;
-    if (pc.colorSpace == 9) {              // BT.2020 NCL
-        r = yN + 1.4746   * vN;
-        g = yN - 0.16455  * uN - 0.57135 * vN;
-        b = yN + 1.8814   * uN;
-    } else if (pc.colorSpace == 1) {       // BT.709
-        r = yN + 1.5748   * vN;
-        g = yN - 0.18733  * uN - 0.46812 * vN;
-        b = yN + 1.8556   * uN;
-    } else {                                // BT.601 fallback
-        r = yN + 1.402    * vN;
-        g = yN - 0.344136 * uN - 0.714136 * vN;
-        b = yN + 1.772    * uN;
-    }
-    return vec4(clamp(vec3(r, g, b), 0.0, 1.0), 1.0);
+    vec3 rgb;
+    if (pc.colorSpace == 9)      rgb = vec3(yN + 1.4746 * vN, yN - 0.16455 * uN - 0.57135 * vN, yN + 1.8814 * uN);
+    else if (pc.colorSpace == 1) rgb = vec3(yN + 1.5748 * vN, yN - 0.18733 * uN - 0.46812 * vN, yN + 1.8556 * uN);
+    else                         rgb = vec3(yN + 1.402 * vN, yN - 0.344136 * uN - 0.714136 * vN, yN + 1.772 * uN);
+
+    return vec4(clamp(rgb, 0.0, 1.0), 1.0);
 }
 
 void main() {
     ivec2 px = ivec2(gl_GlobalInvocationID.xy);
     if (px.x >= pc.width || px.y >= pc.height) return;
 
-    float Y = byteY(px.y * pc.strideY + px.x);
-    int cx = px.x >> 1, cy = px.y >> 1;
-    float U = byteU(cy * pc.strideU + cx);
-    float V = byteV(cy * pc.strideV + cx);
+    // Y: 1 byte per pixel
+    int yIdx = px.y * pc.strideY + px.x;
+    uint yWord = dataY[yIdx >> 2];
+    float Y = float(getByte(yWord, yIdx & 3));
+
+    // U/V: 1 byte ogni 4 pixel (subcampionati 4:2:0)
+    int cx = px.x >> 1;
+    int cy = px.y >> 1;
+
+    int uIdx = cy * pc.strideU + cx;
+    uint uWord = dataU[uIdx >> 2];
+    float U = float(getByte(uWord, uIdx & 3));
+
+    int vIdx = cy * pc.strideV + cx;
+    uint vWord = dataV[vIdx >> 2];
+    float V = float(getByte(vWord, vIdx & 3));
 
     imageStore(outImage, px, yuv2rgb(Y, U, V));
 }

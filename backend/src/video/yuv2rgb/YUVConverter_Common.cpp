@@ -10,23 +10,6 @@
 
 namespace yuvconv {
 
-// =============================================================================
-//  Memory helpers
-// =============================================================================
-/*
-    uint32_t findMemoryType(VulkanContext* ctx, uint32_t typeFilter,
-                        VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties props;
-    vkGetPhysicalDeviceMemoryProperties(ctx->physicalDevice, &props);
-    for (uint32_t i = 0; i < props.memoryTypeCount; ++i) {
-        if ((typeFilter & (1u << i)) &&
-            (props.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-    return UINT32_MAX;
-}
-*/
 bool createMappedStorageBuffer(VulkanContext* ctx,
                                VkDeviceSize    size,
                                VkBuffer&       outBuffer,

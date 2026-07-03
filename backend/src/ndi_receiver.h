@@ -20,6 +20,7 @@
 #include "multichannel_ringbuffer.h"
 
 #include "video/yuv2rgb/YUV2RGBPipeline.h"
+#include "video//vulkan_utils.h"
 
 
 namespace {

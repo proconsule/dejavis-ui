@@ -119,6 +119,12 @@ public:
     uint32_t getOutputHeight() const {
         return m_postProcessor->getHeight();
     }
+    std::string getFileName() {
+        return curr_filename;
+    }
+    std::string getFormatName() {
+        return curr_format;
+    }
 
 
 private:
@@ -145,6 +151,7 @@ private:
     std::string curr_filename;
     int img_width = 0;
     int img_height = 0;
+    std::string curr_format;
 
     AVFrame* m_frame_sw = nullptr;
 

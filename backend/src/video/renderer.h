@@ -173,7 +173,8 @@ public:
     bool CreateVulkanDevice(uint32_t gpuIdx);
     bool CreateDescriptorPool();
     bool CreateDefaultSampler();
-    uint32_t core_w;
+
+	uint32_t core_w;
     uint32_t core_h;
 
 	std::string fileplayers_basepath = "";
@@ -232,7 +233,7 @@ public:
 
     void drawVideoLayer(VkCommandBuffer cmd, VkDescriptorSet textureSet,
                                float x, float y, float scaleX, float scaleY,
-                               float alpha, bool yFlip,bool useLanczos);
+                               float alpha, bool yFlip,bool useBicubic);
 
     void ProcessVideoMixer(VkCommandBuffer cmd);
 	void ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd);

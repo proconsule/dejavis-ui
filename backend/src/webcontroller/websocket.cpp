@@ -668,14 +668,23 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int deviceId = json["devid"].asInt();
 			uint32_t channels = json["channels"].asUInt();
 			uint32_t samplerate = json["samplerate"].asUInt();
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid = deviceId;
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.outputtype = mytype;
-			if (mytype == 0 ) m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid == -1;
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.outidx = (CAUDIO_MIXER::MIXER_OUTPUTS)myidx;
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.samplerate = samplerate;
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.channels = channels;
-			m_cunimixer->audio_ref->m_penedingAudioDevLoad.shouldLoad.store(true);
-
+			if (mytype == 1) {
+				m_cunimixer->audio_ref->m_penedingAudioDevLoad.deviceid = deviceId;
+				m_cunimixer->audio_ref->m_penedingAudioDevLoad.outidx = (CAUDIO_MIXER::MIXER_OUTPUTS)myidx;
+				m_cunimixer->audio_ref->m_penedingAudioDevLoad.samplerate = samplerate;
+				m_cunimixer->audio_ref->m_penedingAudioDevLoad.channels = channels;
+				m_cunimixer->audio_ref->m_penedingAudioDevLoad.shouldLoad.store(true);
+			}else if (mytype == 0) {
+				if ((CAUDIO_MIXER::MIXER_OUTPUTS)myidx == CAUDIO_MIXER::OUTPUT_MASTER) {
+					m_cunimixer->audio_ref->m_penedingDummyLoad.device = CAUDIO_MIXER::OUTPUT_MASTER;
+					m_cunimixer->audio_ref->m_penedingDummyLoad.masterclock_device = CAUDIO_MIXER::OUTPUT_AUX;
+				}
+				if ((CAUDIO_MIXER::MIXER_OUTPUTS)myidx == CAUDIO_MIXER::OUTPUT_AUX) {
+					m_cunimixer->audio_ref->m_penedingDummyLoad.device = CAUDIO_MIXER::OUTPUT_AUX;
+					m_cunimixer->audio_ref->m_penedingDummyLoad.masterclock_device = CAUDIO_MIXER::OUTPUT_MASTER;
+				}
+				m_cunimixer->audio_ref->m_penedingDummyLoad.shouldLoad.store(true);
+			}
 		}
 
 		if (getMsgId(json) == DEJAVISUI_MSGID::VIDEO_VISIBLE) {

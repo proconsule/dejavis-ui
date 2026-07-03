@@ -96,28 +96,9 @@ int main(int argc, char* argv[]) {
 
     std::string audiopath = audio_config["file_path"].asString();
     milkplaylistdb.Init(configpath + "projectm_milk.db");
-/*
-    if (!Audio.startMasterDummy()) {
-        DEJAVISUI_LOG_ERROR("Failed starting Master Dummy");
-        return -1;
-    }
-
-
-    if (!Audio.startAuxDummy()) {
-        DEJAVISUI_LOG_ERROR("Failed starting Aux Dummy");
-        return -1;
-    }
-*/
-    if (!Audio.startTrashDummy()) {
-        DEJAVISUI_LOG_ERROR("Failed starting Trash Dummy");
-        return -1;
-    }
 
 
     Audio.m_projectm_wrapper = &projectm_wrapper;
-//
-    //Audio.startMasterOutput(Audio.getDefaultOutput(),2,48000);
-
 
     Audio.m_penedingAudioDevLoad.deviceid = Audio.getDefaultOutput();
     Audio.m_penedingAudioDevLoad.samplerate = 48000;
@@ -197,7 +178,7 @@ int main(int argc, char* argv[]) {
 
     if (!YUV2RGBPipeline::instance().isInitialized()) {
         if (!YUV2RGBPipeline::instance().init(&Renderer.m_ctx)) {
-            DEJAVISUI_LOG_ERROR("[NDI] YUV2RGBPipeline::init fallita");
+            DEJAVISUI_LOG_ERROR("YUV2RGBPipeline::init fallita");
         }
     }
     YUV2RGBPipeline::instance().setMixerDescriptorLayout(Renderer.m_ctx.m_mixerDescriptorLayout);

@@ -18,50 +18,50 @@ layout(push_constant) uniform PC {
     int height;
 } pc;
 
-float byteY(int ofs)  { return float((dataY[ofs >> 2]  >> ((ofs & 3) * 8)) & 0xFFu); }
-float byteUV(int ofs) { return float((dataUV[ofs >> 2] >> ((ofs & 3) * 8)) & 0xFFu); }
+// Helper ottimizzato per estrarre il byte senza shiftare ogni volta dentro la funzione
+// Usiamo i bitfield per essere più veloci
+float getByte(uint data, int byteIndex) {
+    return float((data >> (byteIndex * 8)) & 0xFFu);
+}
 
 vec4 yuv2rgb(float Y, float U, float V) {
-    float yN, uN, vN;
-    if (pc.rangeFull == 1) {
-        yN = Y / 255.0;
-        uN = (U - 128.0) / 255.0;
-        vN = (V - 128.0) / 255.0;
-    } else {
-        yN = (Y - 16.0)  / 219.0;
-        uN = (U - 128.0) / 224.0;
-        vN = (V - 128.0) / 224.0;
-    }
+    // Range mapping compatto
+    float yN = (pc.rangeFull == 1) ? (Y / 255.0) : ((Y - 16.0) / 219.0);
+    float uN = (U - 128.0) / ((pc.rangeFull == 1) ? 255.0 : 224.0);
+    float vN = (V - 128.0) / ((pc.rangeFull == 1) ? 255.0 : 224.0);
 
-    float r, g, b;
-    if (pc.colorSpace == 9) {              // BT.2020 NCL
-        r = yN + 1.4746   * vN;
-        g = yN - 0.16455  * uN - 0.57135 * vN;
-        b = yN + 1.8814   * uN;
-    } else if (pc.colorSpace == 1) {       // BT.709
-        r = yN + 1.5748   * vN;
-        g = yN - 0.18733  * uN - 0.46812 * vN;
-        b = yN + 1.8556   * uN;
-    } else {
-        r = yN + 1.402    * vN;
-        g = yN - 0.344136 * uN - 0.714136 * vN;
-        b = yN + 1.772    * uN;
+    vec3 rgb;
+    // Scelta coefficienti tramite costante hardcoded per evitare branch pesanti
+    if (pc.colorSpace == 9) { // BT.2020
+        rgb = vec3(yN + 1.4746 * vN, yN - 0.16455 * uN - 0.57135 * vN, yN + 1.8814 * uN);
+    } else if (pc.colorSpace == 1) { // BT.709
+        rgb = vec3(yN + 1.5748 * vN, yN - 0.18733 * uN - 0.46812 * vN, yN + 1.8556 * uN);
+    } else { // BT.601
+        rgb = vec3(yN + 1.402 * vN, yN - 0.344136 * uN - 0.714136 * vN, yN + 1.772 * uN);
     }
-    return vec4(clamp(vec3(r, g, b), 0.0, 1.0), 1.0);
+    return vec4(clamp(rgb, 0.0, 1.0), 1.0);
 }
 
 void main() {
     ivec2 px = ivec2(gl_GlobalInvocationID.xy);
     if (px.x >= pc.width || px.y >= pc.height) return;
 
+    // Y: calcolo indice lineare
     int yIdx = px.y * pc.strideY + px.x;
-    float Y  = byteY(yIdx);
+    uint yData = dataY[yIdx >> 2];
+    float Y = getByte(yData, yIdx & 3);
 
+    // UV: calcolo una sola volta per i 4 pixel che condividono lo stesso blocco UV
+    // NV12 è 4:2:0, quindi UV è subcampionato
     int cx = px.x >> 1;
     int cy = px.y >> 1;
-    int uvIdx = cy * pc.strideUV + cx * 2;
-    float U = byteUV(uvIdx);
-    float V = byteUV(uvIdx + 1);
+    int uvIdx = cy * pc.strideUV + (cx << 1);
+    uint uvData = dataUV[uvIdx >> 2];
+
+    // Estraiamo U e V in base all'offset del byte nel uint
+    // UV sono vicini nel buffer, quindi spesso stanno nello stesso uint
+    float U = getByte(uvData, uvIdx & 3);
+    float V = getByte(uvData, (uvIdx + 1) & 3);
 
     imageStore(outImage, px, yuv2rgb(Y, U, V));
 }

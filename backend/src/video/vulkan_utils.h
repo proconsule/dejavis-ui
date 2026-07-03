@@ -22,4 +22,6 @@ void EndSingleTimeCommands(VulkanContext* _ctx, VkCommandBuffer commandBuffer, Q
 uint32_t FindMemoryType(VulkanContext *_ctx,uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 VkResult VulkanQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence, const char* debugName);
+
+
 #endif //DEJAVIS_UI_VULKAN_UTILS_H

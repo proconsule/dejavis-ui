@@ -51,34 +51,30 @@ void main() {
 
     if (gX >= pc.width || gY >= pc.height) return;
 
-    vec3 c0 = sampleRGB(gX,     gY);
-    vec3 c1 = sampleRGB(gX + 1, gY);
-    vec3 c2 = sampleRGB(gX + 2, gY);
-    vec3 c3 = sampleRGB(gX + 3, gY);
+    // Caricamento dei campioni RGB (8 campioni totali per blocco 4x2)
+    vec3 c[8];
+    c[0] = sampleRGB(gX, gY);     c[1] = sampleRGB(gX+1, gY);     c[2] = sampleRGB(gX+2, gY);     c[3] = sampleRGB(gX+3, gY);
+    c[4] = sampleRGB(gX, gY+1);   c[5] = sampleRGB(gX+1, gY+1);   c[6] = sampleRGB(gX+2, gY+1);   c[7] = sampleRGB(gX+3, gY+1);
 
-    vec3 b0 = sampleRGB(gX,     gY + 1);
-    vec3 b1 = sampleRGB(gX + 1, gY + 1);
-    vec3 b2 = sampleRGB(gX + 2, gY + 1);
-    vec3 b3 = sampleRGB(gX + 3, gY + 1);
+    // Packing Y (contiguo)
+    uint pY0 = rgbToY(c[0]) | (rgbToY(c[1]) << 8) | (rgbToY(c[2]) << 16) | (rgbToY(c[3]) << 24);
+    uint pY1 = rgbToY(c[4]) | (rgbToY(c[5]) << 8) | (rgbToY(c[6]) << 16) | (rgbToY(c[7]) << 24);
 
-    uint packedY0 = rgbToY(c0) | (rgbToY(c1) << 8) | (rgbToY(c2) << 16) | (rgbToY(c3) << 24);
-    uint packedY1 = rgbToY(b0) | (rgbToY(b1) << 8) | (rgbToY(b2) << 16) | (rgbToY(b3) << 24);
+    dataY[(gY * pc.strideY + gX) >> 2] = pY0;
+    dataY[((gY + 1) * pc.strideY + gX) >> 2] = pY1;
 
-    dataY[(gY * pc.strideY + gX) / 4] = packedY0;
-    dataY[((gY + 1) * pc.strideY + gX) / 4] = packedY1;
+    // Packing UV (Media 2x2 per i due blocchi U0V0 e U1V1)
+    vec2 uv0 = (rgbToUV(c[0]) + rgbToUV(c[1]) + rgbToUV(c[4]) + rgbToUV(c[5])) * 0.25;
+    vec2 uv1 = (rgbToUV(c[2]) + rgbToUV(c[3]) + rgbToUV(c[6]) + rgbToUV(c[7])) * 0.25;
 
-    vec2 uv01 = (rgbToUV(c0) + rgbToUV(c1) + rgbToUV(b0) + rgbToUV(b1)) * 0.25;
-    vec2 uv23 = (rgbToUV(c2) + rgbToUV(c3) + rgbToUV(b2) + rgbToUV(b3)) * 0.25;
+    uint pUV = (uint(uv0.x + 0.5)) | (uint(uv0.y + 0.5) << 8) |
+               (uint(uv1.x + 0.5) << 16) | (uint(uv1.y + 0.5) << 24);
 
-    uint u0 = uint(uv01.x + 0.5); uint v0 = uint(uv01.y + 0.5);
-    uint u1 = uint(uv23.x + 0.5); uint v1 = uint(uv23.y + 0.5);
-
-    uint packedUV = u0 | (v0 << 8) | (u1 << 16) | (v1 << 24);
-
-    // --- CORREZIONE QUI: gX senza il * 2 ---
-    dataUV[((gY / 2) * pc.strideU + gX) / 4] = packedUV;
+    // Indice corretto per NV12 (strideU è solitamente pari a strideY)
+    dataUV[((gY >> 1) * pc.strideU + gX) >> 2] = pUV;
 }
 )";
+
 
 // =============================================================================
 //  Shader YUV420P (Definitivo - Allineato a 8x2 Pixel per Thread)

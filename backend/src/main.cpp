@@ -139,7 +139,9 @@ int main(int argc, char* argv[]) {
 
 
     Renderer.Init_Core(video_config["gpu_idx"].asInt(),video_config["core_w"].asInt(),video_config["core_h"].asInt());
-    VulkanLog::Init(Renderer.m_ctx.instance,Renderer.m_ctx.device,"DEJAVISUI");
+    if (general_config["debuglog"].asBool() == true) {
+        VulkanLog::Init(Renderer.m_ctx.instance,Renderer.m_ctx.device,"DEJAVISUI");
+    }
     Renderer.Init_GLFW_Window(video_config["window_w"].asInt(),video_config["window_h"].asInt());
     Json::Value video = userconfig.getConfig()["video"];
     if (video["fullscreen"].asBool()) {
@@ -274,9 +276,17 @@ int main(int argc, char* argv[]) {
 
     }
 
-    Audio.stop();
+    if (general_config["debuglog"].asBool() == true) {
+        VulkanLog::Shutdown(Renderer.m_ctx.instance);
+    }
 
+    AV_Encoder.cleanup();
+    projectm_wrapper.Cleanup();
+
+    Audio.stop();
+    Renderer.Cleanup_Core();
     app().quit();
+
     return 0;
 
 }

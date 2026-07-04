@@ -155,6 +155,7 @@ int CAudio::startMixerInput(int mixer_id,int deviceId,uint32_t _channels,uint32_
 
     mixer_item->isActive = true;
     mixer_item->type = 2;
+    mixer_item->mixerout_idx = 0;
 
     return Pa_StartStream(mixer_item->inputStream) == paNoError ? mixer_id : -1;
 }
@@ -483,13 +484,26 @@ Json::Value CAudio::getDevicesJson() {
 
 void CAudio::stop() {
     isRunning = false;
+
+    trashDummyTimerRunning = false;
+    if (trashdummyTimerThread.joinable()) trashdummyTimerThread.join();
+
+    ismasterDummyTimerRunning = false;
+    if (masterdummyTimerThread.joinable()) masterdummyTimerThread.join();
+
+    isauxDummyTimerRunning = false;
+    if (auxdummyTimerThread.joinable()) auxdummyTimerThread.join();
+
     if (processingThread.joinable()) {
         processingThread.join();
     }
 
+    AUDIO_MIXER.Stop();
+
 }
 
 CAudio::~CAudio() {
+    stop();
 	if (inputStream) {
         Pa_StopStream(inputStream);
         Pa_CloseStream(inputStream);

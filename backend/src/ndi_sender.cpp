@@ -10,10 +10,10 @@ CNDISender::CNDISender() {
 
 CNDISender::~CNDISender() {
     Stop();
-    m_cv.notify_all(); // Lo svegliamo se sta dormendo sulla wait
+    m_cv.notify_all();
 
     if (m_workerThread.joinable()) {
-        m_workerThread.join(); // Aspettiamo che il thread finisca l'ultimo invio
+        m_workerThread.join();
     }
 
     if (m_pNDI_send) {
@@ -244,7 +244,6 @@ void CNDISender::createReadbackBuffer(uint32_t w, uint32_t h) {
     for (int i = 0; i < 3; i++) {
         m_readback[i].size = imageSize;
 
-        // 1. Creazione Buffer
         VkBufferCreateInfo bufferInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
         bufferInfo.size = imageSize;
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -255,7 +254,6 @@ void CNDISender::createReadbackBuffer(uint32_t w, uint32_t h) {
             continue;
         }
 
-        // 2. Requisiti di memoria
         VkMemoryRequirements memReqs;
         vkGetBufferMemoryRequirements(m_ctx->device, m_readback[i].buffer, &memReqs);
 
@@ -270,10 +268,8 @@ void CNDISender::createReadbackBuffer(uint32_t w, uint32_t h) {
             continue;
         }
 
-        // 4. Binding e Mapping persistente
         vkBindBufferMemory(m_ctx->device, m_readback[i].buffer, m_readback[i].memory, 0);
 
-        // Mappiamo una volta sola e teniamo il puntatore (Persistent Mapping)
         if (vkMapMemory(m_ctx->device, m_readback[i].memory, 0, imageSize, 0, &m_readback[i].mapped) != VK_SUCCESS) {
             DEJAVISUI_LOG_ERROR("[NDI-Sender] Fallito mapping memoria buffer %d", i);
         }
@@ -315,16 +311,11 @@ void CNDISender::SendMuxedFrame(RGB2YUVSlotResources& slot) {
     {
         std::lock_guard<std::mutex> lock(m_queueMutex);
         if (m_packetQueue.size() >= 2) {
-            // La coda è già satura.
-            // Droppiamo il frame ATTUALE per non sovraccaricare NDI
-            // e restituiamo subito lo slot al pool dei free.
             releaseSlot(&slot);
             DEJAVISUI_LOG_WARN("[NDI] Coda satura, frame attuale droppato");
             return;
         }
 
-        // Se c'è spazio, mettiamo lo slot in coda.
-        // Lo slot non verrà rilasciato finché NDIWorkerThread non avrà finito.
         m_packetQueue.push(&slot);
         m_cv.notify_one();
     }

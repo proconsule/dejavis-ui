@@ -36,10 +36,20 @@ bool WebRTCSession::start() {
     m_pc->onLocalDescription([this](rtc::Description desc) {
         DEJAVISUI_LOG_DEBUG("[WebRTC] Answer generata, impacchetto in JSON...");
 
-        // Creiamo l'oggetto JSON per la Answer
+        std::string sdp(desc);
+
+
+        size_t pos = 0;
+        while ((pos = sdp.find("a=setup:actpass", pos)) != std::string::npos) {
+            sdp.replace(pos, 15, "a=setup:passive");
+            pos += 15; // Avanza oltre la sostituzione
+        }
+
+        DEJAVISUI_LOG_DEBUG("[WebRTC] SDP corretto (setup:passive) pronto per l'invio.");
+
         Json::Value root;
         root["type"] = "answer";
-        root["sdp"] = std::string(desc); // L'SDP va dentro il campo "sdp"
+        root["sdp"] = sdp;
 
         Json::FastWriter writer;
         std::string payload = writer.write(root);

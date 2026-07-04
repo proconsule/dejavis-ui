@@ -10,7 +10,7 @@ CNDIReceiver::CNDIReceiver() {
 }
 
 CNDIReceiver::~CNDIReceiver() {
-    Stop();                                  // join recv thread + cleanup NDI/YUV/resampler
+    Stop();
 
     m_stopFinder = true;
     if (m_findThread.joinable()) m_findThread.join();
@@ -18,7 +18,7 @@ CNDIReceiver::~CNDIReceiver() {
     if (m_ctx) {
         vkDeviceWaitIdle(m_ctx->device);     // GPU non sta più usando nulla
 
-        destroyStaging();                    // mancante prima
+        destroyStaging();
 
         std::lock_guard<std::mutex> lock(m_destructionMutex);
         for (auto& pd : m_destructionQueue) {

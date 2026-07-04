@@ -27,6 +27,7 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_vulkan.h>
+#include <libavcodec/bsf.h>
 }
 
 #include "dejatimer.h"
@@ -69,6 +70,7 @@ static const EncoderCandidate kCandidates[] = {
 #else
 static const EncoderCandidate kCandidates[] = {
     { "h264_videotoolbox",   AV_PIX_FMT_YUV420P },
+    { "h264_videotoolbox",   AV_PIX_FMT_NV12 },
     { "libx264",      AV_PIX_FMT_YUV420P },
 };
 #endif
@@ -272,6 +274,10 @@ private:
 
     bool setupVideo(int width, int height, int bitrate);
     bool TryVideoEncoder(std::string name,int width, int height, int bitrate,AVCodecContext** outCtx, AVPixelFormat* outPixFmt);
+
+    bool TryVideoEncoder_MacOS(std::string name, int width, int height, int bitrate, AVCodecContext **outCtx,
+                               AVPixelFormat *outPixFmt);
+
     bool setupAudio(int sample_rate, int channels,int bitrate);
     void videoLoop();
     void audioLoop();
@@ -343,6 +349,12 @@ private:
     bool createCopyRing();
     void destroyCopyRing();
     bool encodeSlotVulkan(RGB2YUVSlotResources* slot);
+
+    AVBSFContext *init_bsf_filter(AVCodecContext *enc_ctx);
+
+
+    AVBSFContext *m_bsf_ctx = NULL;
+
 
 };
 

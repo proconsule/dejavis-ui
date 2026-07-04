@@ -436,14 +436,72 @@ bool CAV_ENCODER::TryVideoEncoder(std::string name,int width, int height, int bi
     return true;
 }
 
+bool CAV_ENCODER::TryVideoEncoder_MacOS(std::string name,int width, int height, int bitrate,AVCodecContext** outCtx, AVPixelFormat* outPixFmt)
+{
+    const AVCodec* codec = avcodec_find_encoder_by_name(name.c_str());
+    if (!codec) return false;
+
+    AVCodecContext* ctx = avcodec_alloc_context3(codec);
+    if (!ctx) return false;
+
+    // Trova il pix_fmt giusto per questo encoder
+    AVPixelFormat pf = AV_PIX_FMT_YUV420P;
+    for (auto& c : kCandidates) {
+        if (std::string(c.name) == name) { pf = c.input_format; break; }
+    }
+
+    ctx->width        = width;
+    ctx->height       = height;
+    ctx->time_base    = {1, 1000000};
+    ctx->framerate    = {60, 1};
+    ctx->bit_rate     = bitrate;
+    ctx->gop_size     = 60;
+    ctx->keyint_min   = 60;
+    ctx->max_b_frames = 0;
+    ctx->pix_fmt      = pf;
+    ctx->profile      = AV_PROFILE_H264_MAIN;
+
+    const std::string nm = name;
+
+    AVDictionary* opts = nullptr;
+    av_dict_set(&opts, "realtime", "1", 0);       // Abilita la modalità a latenza zero
+    av_dict_set(&opts, "prio_speed", "1", 0);     // Dai priorità alla velocità rispetto alla qualità pura
+    av_dict_set(&opts, "allow_sw", "0", 0);       // Forza solo hardware (fallisce se l'hardware è saturo)
+
+
+    int r = avcodec_open2(ctx, codec, nullptr);
+    if (r < 0) {
+        char err[256];
+        av_strerror(r, err, sizeof(err));
+        DEJAVISUI_LOG_DEBUG("[ENCODER] %s open failed: %s", "h264", err);
+        avcodec_free_context(&ctx);
+        return false;
+    }
+
+
+
+    *outCtx    = ctx;
+    *outPixFmt = pf;
+    DEJAVISUI_LOG_INFO("[ENCODER] %s opened OK", name.c_str());
+    return true;
+}
+
 bool CAV_ENCODER::setupVideo(int width, int height, int bitrate) {
 
-#ifndef __APPLE__
+
+    for (const auto& cand : kCandidates) {
+#ifdef __APPLE__
+        if (TryVideoEncoder_MacOS(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
+        DEJAVISUI_LOG_DEBUG("Init MP4 -> ANNEX_B");
+
+#else
+        if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
 
 #endif
-    for (const auto& cand : kCandidates) {
-        if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
     }
+#ifdef __APPLE__
+    m_bsf_ctx = init_bsf_filter(m_video_codec_ctx);
+#endif
 
     return true;
 
@@ -619,6 +677,7 @@ void CAV_ENCODER::audioLoop() {
         if (avcodec_send_frame(m_audio_codec_ctx, m_audio_frame) >= 0) {
             AVPacket* pkt = av_packet_alloc();
             while (avcodec_receive_packet(m_audio_codec_ctx, pkt) >= 0) {
+
                 pushToServices(pkt, false);
                 av_packet_unref(pkt);
             }
@@ -711,10 +770,56 @@ void CAV_ENCODER::videoLoop() {
                                                         encode_frame->flags|=AV_FRAME_FLAG_KEY; }
             if (avcodec_send_frame(m_video_codec_ctx, encode_frame) >= 0) {
                 AVPacket* pkt = av_packet_alloc();
+#ifdef __APPLE__
+                // 1. Estrai i pacchetti nativi AVCC da VideoToolbox
                 while (avcodec_receive_packet(m_video_codec_ctx, pkt) >= 0) {
-                    pushToServices(pkt, true); av_packet_unref(pkt);
+
+
+                    if (!m_bsf_ctx) {
+                        DEJAVISUI_LOG_ERROR("[VIDEO] m_bsf_ctx è NULL! Salto il filtraggio dei pacchetti.");
+                        // Se il filtro non c'è, svuota comunque i pacchetti dall'encoder per non bloccarlo
+                        while (avcodec_receive_packet(m_video_codec_ctx, pkt) >= 0) {
+                            av_packet_unref(pkt);
+                        }
+                        av_packet_free(&pkt);
+                        av_frame_free(&encode_frame);
+                        continue;
+                    }
+
+                    // Invia il pacchetto AVCC al filtro. Il filtro svuota internamente pkt.
+                    int ret = av_bsf_send_packet(m_bsf_ctx, pkt);
+                    if (ret < 0) {
+                        DEJAVISUI_LOG_ERROR("[VIDEO] Errore av_bsf_send_packet: %d", ret);
+                        av_packet_unref(pkt); // Pulisci se fallisce
+                        continue;
+                    }
+
+                    // Allocazione di un pacchetto di supporto per l'output in Annex B
+                    AVPacket* bsf_pkt = av_packet_alloc();
+
+                    // 2. Estrai i pacchetti convertiti in Annex B dal filtro
+                    while ((ret = av_bsf_receive_packet(m_bsf_ctx, bsf_pkt)) == 0) {
+                        // Ora bsf_pkt è in formato Annex B (contiene 0x00000001)
+                        pushToServices(bsf_pkt, true);
+
+                        // Pulisci il pacchetto di supporto prima del prossimo bsf_receive
+                        av_packet_unref(bsf_pkt);
+                    }
+
+                    // Libera la struttura del pacchetto di supporto
+                    av_packet_free(&bsf_pkt);
+
+                    // NOTA: Non serve fare av_packet_unref(pkt) qui perché av_bsf_send_packet
+                    // ha già preso l'ownership e resettato il pacchetto originale.
+                }
+                // 3. Libera il pacchetto principale allocato all'inizio della sessione
+                av_packet_free(&pkt);
+#else
+                while (avcodec_receive_packet(m_video_codec_ctx, pkt) >= 0) {
+                    pushToServices(pkt, true);
                 }
                 av_packet_free(&pkt);
+#endif
             }
             av_frame_free(&encode_frame);
         }
@@ -782,33 +887,23 @@ void CAV_ENCODER::cleanup() {
 
     DEJAVISUI_LOG_DEBUG("Inizio procedura di arresto...\n");
 
-    m_queue_cv.notify_all(); // Sblocca il videoLoop se è in wait_for
+    m_queue_cv.notify_all();
 
     if (m_video_thread.joinable()) m_video_thread.join();
     if (m_audio_thread.joinable()) m_audio_thread.join();
-
     if (m_watchdog_thread.joinable()) m_watchdog_thread.join();
 
     flush_encoders();
 
+    std::vector<std::shared_ptr<OutputService>> services_to_cleanup;
     {
         std::lock_guard<std::mutex> lock(m_services_vector_mutex);
-        for (auto& service : m_active_services) {
-            std::lock_guard<std::mutex> s_lock(service->service_mutex);
-
-            if (service->fmt_ctx) {
-                if (service->connected.load()) {
-                    av_write_trailer(service->fmt_ctx);
-                }
-                if (service->fmt_ctx->pb) {
-                    avio_closep(&service->fmt_ctx->pb);
-                }
-                avformat_free_context(service->fmt_ctx);
-                service->fmt_ctx = nullptr;
-            }
-        }
+        services_to_cleanup = std::move(m_active_services);
         m_active_services.clear();
+        m_active_services_count.store(0);
     }
+
+    services_to_cleanup.clear();
 
     if (m_video_codec_ctx) {
         avcodec_free_context(&m_video_codec_ctx);
@@ -1170,6 +1265,34 @@ bool CAV_ENCODER::encodeSlotVulkan(RGB2YUVSlotResources* slot) {
     }
     av_packet_free(&pkt);
     return true;
+}
+
+AVBSFContext * CAV_ENCODER::init_bsf_filter(AVCodecContext *enc_ctx) {
+    const AVBitStreamFilter *bsf = av_bsf_get_by_name("h264_mp4toannexb");
+    if (!bsf) {
+        fprintf(stderr, "Filtro non trovato\n");
+        return NULL;
+    }
+
+    AVBSFContext *bsf_ctx = NULL;
+    if (av_bsf_alloc(bsf, &bsf_ctx) < 0) {
+        fprintf(stderr, "Impossibile allocare il contesto BSF\n");
+        return NULL;
+    }
+
+    if (avcodec_parameters_from_context(bsf_ctx->par_in, enc_ctx) < 0) {
+        fprintf(stderr, "Impossibile copiare i parametri del codec\n");
+        av_bsf_free(&bsf_ctx);
+        return NULL;
+    }
+
+    if (av_bsf_init(bsf_ctx) < 0) {
+        fprintf(stderr, "Errore inizializzazione filtro\n");
+        av_bsf_free(&bsf_ctx);
+        return NULL;
+    }
+
+    return bsf_ctx;
 }
 
 Json::Value CAV_ENCODER::getStatus() {

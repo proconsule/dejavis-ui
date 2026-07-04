@@ -71,7 +71,14 @@ typedef struct {
 
 class cprojectm_wrapper {
 public:
+
+    cprojectm_wrapper();
+    ~cprojectm_wrapper();
+
+
     void Init(VulkanContext *_ctx, VulkanUniTexture * _tex, uint32_t _width, uint32_t _height);
+
+    void Cleanup();
 
     void Init_ProjectM_Opengl();
 

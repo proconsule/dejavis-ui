@@ -250,6 +250,9 @@ bool YUV2RGBPipeline::createSlot(YUV2RGBSlotResources& slot,
 void YUV2RGBPipeline::destroySlot(YUV2RGBSlotResources& slot) {
     if (!slot.valid && !slot.converterSlot && !slot.rgbaTexture.VkTexture.image) return;
     vkDeviceWaitIdle(m_ctx->device);
+
+    destroySyncResources(slot);
+
     if (slot.converter && slot.converterSlot) {
         slot.converter->destroySlot(slot.converterSlot.get());
     }

@@ -242,10 +242,79 @@ if (_vulkandebug) {
 
 void CRenderer::Cleanup_Core() {
     vkDeviceWaitIdle(m_ctx.device);
+
+    // 1. Risorse Master per frame
     for (auto& mr : m_master_per_frame) {
         DestroyMasterResources(&mr);
     }
     m_master_per_frame.clear();
+
+    // 2. Pipeline e Layout del Video Mixer
+    if (m_mixerPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(m_ctx.device, m_mixerPipeline, nullptr);
+        m_mixerPipeline = VK_NULL_HANDLE;
+    }
+    if (m_mixerPipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(m_ctx.device, m_mixerPipelineLayout, nullptr);
+        m_mixerPipelineLayout = VK_NULL_HANDLE;
+    }
+
+    CleanYUV2RGB();
+    CleanVideoFX();
+    CleanRGB2YUV();
+
+    // 3. Descriptor Pool e Sampler di default
+    if (m_ctx.descriptorPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(m_ctx.device, m_ctx.descriptorPool, nullptr);
+        m_ctx.descriptorPool = VK_NULL_HANDLE;
+    }
+    if (m_ctx.defaultSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(m_ctx.device, m_ctx.defaultSampler, nullptr);
+        m_ctx.defaultSampler = VK_NULL_HANDLE;
+    }
+
+    if (m_stagingBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(m_ctx.device, m_stagingBuffer, nullptr);
+        m_stagingBuffer = VK_NULL_HANDLE;
+    }
+    if (m_stagingMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(m_ctx.device, m_stagingMemory, nullptr);
+        m_stagingMemory = VK_NULL_HANDLE;
+    }
+
+    if (m_ctx.device != VK_NULL_HANDLE) {
+        // LIBERAZIONE ESPLICITA DEI BUFFER prima dei pool
+        if (!m_ctx.commandBuffers.empty()) {
+            vkFreeCommandBuffers(m_ctx.device, m_ctx.graphicsCommandPool,
+                                static_cast<uint32_t>(m_ctx.commandBuffers.size()),
+                                m_ctx.commandBuffers.data());
+            m_ctx.commandBuffers.clear();
+        }
+
+        if (m_ctx.graphicsCommandPool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(m_ctx.device, m_ctx.graphicsCommandPool, nullptr);
+            m_ctx.graphicsCommandPool = VK_NULL_HANDLE;
+        }
+        if (m_ctx.computeCommandPool != VK_NULL_HANDLE && m_ctx.computeCommandPool != m_ctx.graphicsCommandPool) {
+            vkDestroyCommandPool(m_ctx.device, m_ctx.computeCommandPool, nullptr);
+            m_ctx.computeCommandPool = VK_NULL_HANDLE;
+        }
+        if (m_ctx.transferCommandPool != VK_NULL_HANDLE && m_ctx.transferCommandPool != m_ctx.graphicsCommandPool) {
+            vkDestroyCommandPool(m_ctx.device, m_ctx.transferCommandPool, nullptr);
+            m_ctx.transferCommandPool = VK_NULL_HANDLE;
+        }
+    }
+
+    if (m_ctx.device != VK_NULL_HANDLE) {
+        vkDestroyDevice(m_ctx.device, nullptr);
+        m_ctx.device = VK_NULL_HANDLE;
+    }
+    if (m_ctx.instance != VK_NULL_HANDLE) {
+        vkDestroyInstance(m_ctx.instance, nullptr);
+        m_ctx.instance = VK_NULL_HANDLE;
+    }
+
+    gpu_active = false;
 }
 
 bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
@@ -581,7 +650,7 @@ bool CRenderer::CreateDescriptorPool() {
 bool CRenderer::CreateDefaultSampler() {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_CUBIC_EXT; // Filtro per ingrandimento
+    samplerInfo.magFilter = VK_FILTER_LINEAR; // Filtro per ingrandimento
     samplerInfo.minFilter = VK_FILTER_LINEAR; // Filtro per rimpicciolimento
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;

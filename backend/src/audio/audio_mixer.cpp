@@ -600,19 +600,10 @@ CAUDIO_MIXER::~CAUDIO_MIXER() {
 }
 
 void CAUDIO_MIXER::Stop() {
-    bool expected = false;
-    if (!m_stopped.compare_exchange_strong(expected, true)) {
-        return;
-    }
 
     DEJAVISUI_LOG_DEBUG("CAUDIO_MIXER::Stop() avviato\n");
     m_stopping.store(true, std::memory_order_release);
 
-    try {
-        mix_thread_pool.waitForAll(3);
-    } catch (...) {
-
-    }
 
     std::lock_guard<std::mutex> lock(m_mixer_mutex);
 
@@ -644,26 +635,26 @@ void CAUDIO_MIXER::Stop() {
 
     }
 
-    for (auto& out : m_outputs) {
-        if (!out) continue;
-        if (out->ndi_audio_out.isRunning()) {
-            out->ndi_audio_out.Stop_Audio();
-        }
+
+    auto mmasterout = m_outputs[0].get();
+    auto auxout = m_outputs[1].get();
+
+
+    if (mmasterout->ndi_audio_out.isRunning()) {
+        mmasterout->ndi_audio_out.Stop_Audio();
+    }
+    if (auxout->ndi_audio_out.isRunning()) {
+        auxout->ndi_audio_out.Stop_Audio();
     }
 
-    m_inputs.clear();
-    m_outputs.clear();
+    if (RTCAudio)RTCAudio->cleanup();
+    //m_inputs.clear();
+    //m_outputs.clear();
     RTCAudio = nullptr;
 
     DEJAVISUI_LOG_DEBUG("CAUDIO_MIXER::Stop() completato\n");
 }
 
-/*
-void CAUDIO_MIXER::setGainFactor(int _mixerid,GainPreset _gainpreset) {
-    std::lock_guard<std::mutex> lock(m_mixer_mutex);
-    m_inputs[_mixerid]->gainPreset = _gainpreset;
-}
-*/
 
 Json::Value CAUDIO_MIXER::GetStatus() {
     std::lock_guard<std::mutex> lock(m_mixer_mutex);

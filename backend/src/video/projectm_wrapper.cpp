@@ -8,6 +8,15 @@ void projectm_glfw_error_callback(int error, const char* description) {
     DEJAVISUI_LOG_ERROR("GLFW Error (%d): %s", error, description);
 }
 
+cprojectm_wrapper::cprojectm_wrapper() {
+
+}
+
+cprojectm_wrapper::~cprojectm_wrapper() {
+
+}
+
+
 void cprojectm_wrapper::Init(VulkanContext *_ctx,VulkanUniTexture * _tex,uint32_t _width, uint32_t _height) {
     pjm_width = _width;
     pjm_height = _height;
@@ -16,6 +25,70 @@ void cprojectm_wrapper::Init(VulkanContext *_ctx,VulkanUniTexture * _tex,uint32_
     InitInteropResource();
     Init_ProjectM_Opengl();
 }
+
+    void cprojectm_wrapper::Cleanup() {
+        if (!_projectM) return;
+
+        // 1. ProjectM
+        projectm_destroy(_projectM);
+        _projectM = nullptr;
+
+        // 2. OpenGL Cleanup
+        if (m_glContext) {
+            glfwMakeContextCurrent(m_glContext);
+
+            if (m_glFbo) {
+                glDeleteFramebuffers(1, &m_glFbo);
+                m_glFbo = 0;
+            }
+            if (outText) {
+                glDeleteTextures(1, &outText->glTexture);
+                #ifndef __APPLE__
+                if (outText->glMemoryObject) {
+                    glDeleteMemoryObjectsEXT(1, &outText->glMemoryObject);
+                }
+                #else
+                if (outText->glPbo) {
+                    glDeleteBuffers(1, &outText->glPbo);
+                }
+                #endif
+            }
+
+            glfwDestroyWindow(m_glContext);
+            m_glContext = nullptr;
+            glfwTerminate();
+        }
+
+        // 3. Vulkan Cleanup
+        if (m_ctx && outText) {
+            if (outText->VkTexture.view) {
+                vkDestroyImageView(m_ctx->device, outText->VkTexture.view, nullptr);
+                outText->VkTexture.view = VK_NULL_HANDLE;
+            }
+            if (outText->VkTexture.image) {
+                vkDestroyImage(m_ctx->device, outText->VkTexture.image, nullptr);
+                outText->VkTexture.image = VK_NULL_HANDLE;
+            }
+            if (outText->VkTexture.memory) {
+                vkFreeMemory(m_ctx->device, outText->VkTexture.memory, nullptr);
+                outText->VkTexture.memory = VK_NULL_HANDLE;
+            }
+            #ifdef __APPLE__
+            if (outText->stagingBuffer) {
+                vkDestroyBuffer(m_ctx->device, outText->stagingBuffer, nullptr);
+                outText->stagingBuffer = VK_NULL_HANDLE;
+            }
+            if (outText->stagingMemory) {
+                vkFreeMemory(m_ctx->device, outText->stagingMemory, nullptr);
+                outText->stagingMemory = VK_NULL_HANDLE;
+            }
+            if (outText->stagingPtr) {
+                vkUnmapMemory(m_ctx->device, outText->stagingMemory);
+                outText->stagingPtr = nullptr;
+            }
+            #endif
+        }
+    }
 
 void cprojectm_wrapper::PostProcessInit() {
     m_postProcessor = std::make_unique<CPostProcessor>(m_ctx);

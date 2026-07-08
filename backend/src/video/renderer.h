@@ -89,6 +89,7 @@ struct videomixeritem {
     int layer = -1;
     int originalIdx = -1;
 	int audiomixerid = 1;
+	int busoutIdx = -1;
 	bool keepaspect = true;
 	bool anime4k = true;
 	CAV_DECODER *AV_DECODER = nullptr;
@@ -235,7 +236,7 @@ public:
                                float x, float y, float scaleX, float scaleY,
                                float alpha, bool yFlip,bool useBicubic);
 
-    void ProcessVideoMixer(VkCommandBuffer cmd);
+    void ProcessVideoMixer(VkCommandBuffer cmd,int _busIdx);
 	void ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd);
 
     int FindFreeVideoMixerSlot();
@@ -337,7 +338,11 @@ public:
 	void RecordYUVToRGBAConversionCommand(VkCommandBuffer cmd,YUVComputeResources &yuvcompute, VulkanUniTexture& texture);
     VulkanContext m_ctx;
 
-	std::vector<MasterResources> m_master_per_frame;
+	//std::vector<MasterResources> m_master_per_frame;
+
+	std::vector<VideoBusResources> m_videoBusResources;
+
+
 
 	Vulkan_DisplayContext m_display;
 
@@ -442,9 +447,6 @@ public:
 	VkDevice getDevice() const { return m_ctx.device; }
     VkInstance getInstance() const { return m_ctx.instance; }
     VkSurfaceKHR & getSurface()  { return m_display.surface; }
-
-
-
 
 
 private:

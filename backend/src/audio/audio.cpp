@@ -269,6 +269,7 @@ void CAudio::processMasterOutSamples(std::vector<float>& _block, bool* _dataproc
     );
 
     srtLiveBuffer_planar.write(tempIn, frames);
+    webrtcLiveBuffer_planar.write(tempIn, frames);
 
     if (AUDIO_MIXER.RTCAudio &&
     AUDIO_MIXER.RTCAudio->mixer_sel_value.load() == 0) {

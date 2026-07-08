@@ -32,8 +32,16 @@ void cuserconfig::createConfig(std::string _filename) {
     ndi_output["enabled"] = false;
 
 
+    Json::Value webrtc_output;
+    webrtc_output["enabled"] = true;
+    webrtc_output["hevc_enable"] = false;
+    webrtc_output["enabled"].setComment(std::string("/* WEBRTC NEEDED FOR FRONTEND PREVIEW */"),Json::commentAfterOnSameLine);
+    webrtc_output["video_bitrate"] = 5000000;
+    webrtc_output["audio_bitrate"] = 256000;
+
+
     srt_output["enabled"] = true;
-    srt_output["enabled"].setComment(std::string("/* NEEDED FOR WEBRTC ALSO */"),Json::commentAfterOnSameLine);
+    srt_output["enabled"].setComment(std::string("/* SRT OUTPUT */"),Json::commentAfterOnSameLine);
 
     srt_output["video_bitrate"] = 5000000;
     srt_output["audio_bitrate"] = 256000;
@@ -57,6 +65,7 @@ void cuserconfig::createConfig(std::string _filename) {
 
     config["audio"] = audio;
     config["video"] = video;
+    config["webrtc_output"] = webrtc_output;
     config["srt_output"] = srt_output;
     config["ndi_output"] = ndi_output;
     config["general"] = general;

@@ -133,6 +133,7 @@ private:
     std::unique_ptr<CPostProcessor> m_postProcessor;
 
     VulkanContext *m_ctx = nullptr;
+    VkCommandPool m_loaderCommandPool = VK_NULL_HANDLE;
     uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void Vulkan_CreateBuffer(VulkanContext* ctx, VkDeviceSize size, VkBufferUsageFlags usage,
                          VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);

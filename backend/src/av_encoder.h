@@ -55,17 +55,26 @@ struct EncoderCandidate {
 };
 
 #ifdef __linux__
-static const EncoderCandidate kCandidates[] = {
+static const EncoderCandidate h264_kCandidates[] = {
     { "h264_vulkan",  AV_PIX_FMT_VULKAN },
     { "h264_nvenc",   AV_PIX_FMT_NV12 },
     { "h264_vaapi",     AV_PIX_FMT_VAAPI },
     { "libx264",      AV_PIX_FMT_YUV420P },
 };
+
+static const EncoderCandidate hevc_kCandidates[] = {
+    { "hevc_vulkan",  AV_PIX_FMT_VULKAN },
+    { "hevc_nvenc",   AV_PIX_FMT_NV12 },
+};
 #elif _WIN32
-static const EncoderCandidate kCandidates[] = {
+static const EncoderCandidate h264_kCandidates[] = {
     { "h264_vulkan",  AV_PIX_FMT_VULKAN },
     { "h264_nvenc",   AV_PIX_FMT_NV12 },
     { "libx264",      AV_PIX_FMT_YUV420P },
+};
+static const EncoderCandidate hevc_kCandidates[] = {
+    { "hevc_vulkan",  AV_PIX_FMT_VULKAN },
+    { "hevc_nvenc",   AV_PIX_FMT_NV12 },
 };
 #else
 static const EncoderCandidate kCandidates[] = {
@@ -178,12 +187,16 @@ public:
 
     bool init_vaapi_context(AVCodecContext* ctx);
     void addOutput(const std::string& url, const std::string& format);
+
+    void addWebRtcOutput();
+
+
     bool addStreamToContext(AVFormatContext* fmt_ctx, AVCodecContext* codec_ctx, AVStream** out_stream);
     void pushToServices(AVPacket* pkt, bool is_video);
     std::atomic<size_t> m_active_services_count{0};
 
     bool InitHW(VulkanContext *_ctx);
-    bool InitFramesContext(uint32_t w, uint32_t h);
+    bool InitFramesContext(uint32_t w, uint32_t h, AVPixelFormat sw_format);
 
     AVFrame *acquireEncodeVulkanFrame();
 
@@ -193,7 +206,7 @@ public:
     void cleanup();
     AVFrame* WrapVulkanImageInAVFrame(const YUVVideoResources& res);
     bool isRunning(){return m_running;};
-    bool HaveServices(){return !m_active_services.empty();};
+    bool HaveServices(){return !m_active_services.empty() || m_has_webrtc_consumer.load();};
 
     void TestYUVTarget(VulkanContext *_ctx);
 
@@ -239,6 +252,9 @@ public:
 
     CNDISender m_ndi_sender;
 
+
+    bool hevc_enabled = false;
+    bool internal_encoder = false;
 
 private:
 

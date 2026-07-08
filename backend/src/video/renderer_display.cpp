@@ -22,16 +22,14 @@ bool CRenderer::CreateFences(){
 bool CRenderer::CreateSwapChainOnly() {
     if (m_ctx.device == VK_NULL_HANDLE || m_display.surface == VK_NULL_HANDLE) return false;
 
-    // 1. Aspetta che il device sia libero prima di toccare la swapchain
+    m_display.bustodisplay = 0;  // Start from first bus
     vkDeviceWaitIdle(m_ctx.device);
 
-    // 2. Recupera le capacità della superficie
     VkSurfaceCapabilitiesKHR capabilities;
     if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_ctx.physicalDevice, m_display.surface, &capabilities) != VK_SUCCESS) {
         return false;
     }
 
-    // 3. Calcolo dell'Extent (Risoluzione della Swapchain)
     if (capabilities.currentExtent.width != UINT32_MAX) {
         m_display.swapchainExtent = capabilities.currentExtent;
     } else {
@@ -41,22 +39,21 @@ bool CRenderer::CreateSwapChainOnly() {
         m_display.swapchainExtent.height = std::clamp((uint32_t)h, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
     }
 
-    // --- LOGICA ASPECT RATIO (16:9) ---
+
     uint32_t width = m_display.swapchainExtent.width;
     uint32_t height = m_display.swapchainExtent.height;
     float targetRatio = 16.0f / 9.0f; // Modifica qui per altri ratio (es. 21/9)
     float windowRatio = (float)width / (float)height;
 
-    // Calcoliamo la Viewport centrata
     if (windowRatio > targetRatio) {
-        // Finestra troppo larga: Pillarbox (bande nere ai lati)
+
         float viewWidth = (float)height * targetRatio;
         m_display.viewport.x = (width - viewWidth) / 2.0f;
         m_display.viewport.y = 0;
         m_display.viewport.width = viewWidth;
         m_display.viewport.height = (float)height;
     } else {
-        // Finestra troppo alta: Letterbox (bande nere sopra/sotto)
+
         float viewHeight = (float)width / targetRatio;
         m_display.viewport.x = 0;
         m_display.viewport.y = (height - viewHeight) / 2.0f;
@@ -67,12 +64,9 @@ bool CRenderer::CreateSwapChainOnly() {
     m_display.viewport.minDepth = 0.0f;
     m_display.viewport.maxDepth = 1.0f;
 
-    // Lo scissor deve combaciare con la viewport per tagliare i pixel fuori area
     m_display.scissor.offset = { (int32_t)m_display.viewport.x, (int32_t)m_display.viewport.y };
     m_display.scissor.extent = { (uint32_t)m_display.viewport.width, (uint32_t)m_display.viewport.height };
-    // ----------------------------------
 
-    // 4. Configurazione Swapchain
     uint32_t imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
         imageCount = capabilities.maxImageCount;
@@ -97,12 +91,10 @@ bool CRenderer::CreateSwapChainOnly() {
     std::vector<VkPresentModeKHR> availablePresentModes(presentModeCount);
     vkGetPhysicalDeviceSurfacePresentModesKHR(m_ctx.physicalDevice, m_display.surface, &presentModeCount, availablePresentModes.data());
 
-    // 2. Helper per controllare se un modo esiste
     auto isSupported = [&](VkPresentModeKHR mode) {
         return std::find(availablePresentModes.begin(), availablePresentModes.end(), mode) != availablePresentModes.end();
     };
 
-    // 3. Applica la tua logica con fallback sicuro
     swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     if (!vsync) {
@@ -123,7 +115,6 @@ bool CRenderer::CreateSwapChainOnly() {
         return false;
     }
 
-    // Pulizia vecchia swapchain e views
     if (m_display.swapchain != VK_NULL_HANDLE) {
         for (auto view : m_display.swapchainImageViews) vkDestroyImageView(m_ctx.device, view, nullptr);
         for (auto fb : m_display.framebuffers) vkDestroyFramebuffer(m_ctx.device, fb, nullptr);
@@ -131,7 +122,6 @@ bool CRenderer::CreateSwapChainOnly() {
     }
     m_display.swapchain = newSwapchain;
 
-    // 5. Recupero nuove immagini e creazione Views
     vkGetSwapchainImagesKHR(m_ctx.device, m_display.swapchain, &imageCount, nullptr);
     m_display.swapchainImages.resize(imageCount);
     m_display.imagesInFlight.assign(imageCount, VK_NULL_HANDLE);
@@ -166,12 +156,11 @@ bool CRenderer::CreateSwapChainOnly() {
         if (vkCreateImageView(m_ctx.device, &viewInfo, nullptr, &m_display.swapchainImageViews[i]) != VK_SUCCESS) return false;
     }
 
-    // 6. Creazione Framebuffers
     m_display.framebuffers.resize(imageCount);
     for (size_t i = 0; i < imageCount; i++) {
         VkImageView attachments[] = { m_display.swapchainImageViews[i] };
         VkFramebufferCreateInfo fbInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-        fbInfo.renderPass = m_master_per_frame[0].renderPass;
+        fbInfo.renderPass = m_videoBusResources[0].m_master_per_frame[0].renderPass;
         fbInfo.attachmentCount = 1;
         fbInfo.pAttachments = attachments;
         fbInfo.width = m_display.swapchainExtent.width;

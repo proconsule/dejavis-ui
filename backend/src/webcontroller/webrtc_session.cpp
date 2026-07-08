@@ -16,9 +16,10 @@ static uint32_t make_ssrc() {
 }
 
 WebRTCSession::WebRTCSession(std::string id, bool include_audio,
-                             SignalingCallback cb)
+                             bool use_hevc, SignalingCallback cb)
     : m_id(std::move(id))
     , m_include_audio(include_audio)
+    , m_use_hevc(use_hevc)
     , m_signaling_cb(std::move(cb))
 {}
 
@@ -84,8 +85,8 @@ bool WebRTCSession::start() {
         DEJAVISUI_LOG_DEBUG("[WebRTC] Canale Audio Aperto.");
     };
 
-    // Nota: Il payload 103 corrisponde a quello visto nei tuoi log (H264)
-    auto videoData = addVideo(m_pc, 103, make_ssrc(), "0", "stream0", onVideoOpen);
+    uint8_t payload = m_use_hevc ? 49 : 103;
+    auto videoData = addVideo(m_pc, payload, make_ssrc(), "0", "stream0", onVideoOpen);
     m_video_track = videoData->track;
     m_video_cfg = videoData->sender->rtpConfig;
 
@@ -190,13 +191,22 @@ std::shared_ptr<ClientTrackData> WebRTCSession::addVideo(const std::shared_ptr<r
                                                         const std::string cname, const std::string msid,
                                                         const std::function<void (void)> onOpen) {
     auto video = rtc::Description::Video(cname);
-    video.addH264Codec(payloadType);
+    if (m_use_hevc) {
+        video.addH265Codec(payloadType);
+    } else {
+        video.addH264Codec(payloadType);
+    }
     video.addSSRC(ssrc, cname, msid, cname);
     auto track = pc->addTrack(video);
 
-    auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payloadType, rtc::H264RtpPacketizer::ClockRate);
+    auto rtpConfig = std::make_shared<rtc::RtpPacketizationConfig>(ssrc, cname, payloadType, 90000);
 
-    auto packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::LongStartSequence, rtpConfig);
+    std::shared_ptr<rtc::MediaHandler> packetizer;
+    if (m_use_hevc) {
+        packetizer = std::make_shared<rtc::H265RtpPacketizer>(rtc::NalUnit::Separator::LongStartSequence, rtpConfig);
+    } else {
+        packetizer = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::LongStartSequence, rtpConfig);
+    }
 
     auto srReporter = std::make_shared<rtc::RtcpSrReporter>(rtpConfig);
     packetizer->addToChain(srReporter);

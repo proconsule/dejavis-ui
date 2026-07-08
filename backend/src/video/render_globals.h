@@ -88,6 +88,8 @@ struct Vulkan_DisplayContext{
     VkViewport viewport;
     VkRect2D   scissor;
 
+    int bustodisplay = -1;
+
 
 };
 
@@ -312,6 +314,24 @@ struct MasterResources {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     VkRenderPass renderPass = VK_NULL_HANDLE;
 };
+
+struct BusInput {
+    VulkanTexture* texture = nullptr; // La texture da disegnare
+    float alpha = 1.0f;               // Opacità di questa sorgente nel bus
+    float posX = 0, posY = 0;         // Posizione (se vuoi fare cropping/positioning)
+    float scaleX = 1.0f, scaleY = 1.0f;
+    bool active = true;
+};
+
+struct VideoBusResources {
+    std::vector<MasterResources> m_master_per_frame;
+    std::string busName;
+    uint32_t busId;
+
+    std::vector<BusInput> inputs;
+};
+
+
 
 struct VulkanUniTexture{
 

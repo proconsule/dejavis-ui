@@ -227,7 +227,7 @@ bool CRenderer::initVideoMixer() {
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = m_mixerPipelineLayout;
-    pipelineInfo.renderPass = m_master_per_frame[0].renderPass; // Aggancio al RenderPass del Core
+    pipelineInfo.renderPass = m_videoBusResources[0].m_master_per_frame[0].renderPass; // Aggancio al RenderPass del Core
     pipelineInfo.subpass = 0;
 
     if (vkCreateGraphicsPipelines(m_ctx.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_mixerPipeline) != VK_SUCCESS) {
@@ -245,7 +245,7 @@ bool CRenderer::initVideoMixer() {
 
 void CRenderer::drawTestOverlay(VkCommandBuffer cmd, VkDescriptorSet textureSet) {
 
-    auto& cur = m_master_per_frame[m_display.currentFrame];
+    auto& cur = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
 
     // 1. SICUREZZA: Se la pipeline o il set non esistono, usciamo per evitare crash
     if (m_mixerPipeline == VK_NULL_HANDLE) {
@@ -341,7 +341,7 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
 
 
 
-    auto& cur = m_master_per_frame[m_display.currentFrame];
+    auto& cur = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
     if (!_mixerprop->inUse) return;
 
     float finalScaleX = _mixerprop->scale_x;
@@ -493,11 +493,13 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
     }
 }
 
-void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
+void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd,int _busIdx) {
 
-    videomixeritem* sortedPtrs[10];
+    std::vector<videomixeritem *> sortedPtrs;
     for(int i = 0; i < 10; ++i) {
-        sortedPtrs[i] = &videoMixerTextures[i];
+        if (videoMixerTextures[i].busoutIdx == _busIdx) {
+            sortedPtrs.push_back(&videoMixerTextures[i]);
+        }
     }
     std::stable_sort(std::begin(sortedPtrs), std::end(sortedPtrs),
         [](videomixeritem* a, videomixeritem* b) {
@@ -505,7 +507,7 @@ void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
         });
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mixerPipeline);
 
-    auto& cur = m_master_per_frame[m_display.currentFrame];
+    auto& cur = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
 
     //vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mixerPipeline);
 
@@ -516,7 +518,7 @@ void CRenderer::ProcessVideoMixer(VkCommandBuffer cmd) {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
 
-    for(int i = 0; i < 10; ++i) {
+    for(int i = 0; i < sortedPtrs.size(); ++i) {
         videomixeritem* p = sortedPtrs[i];
         //if (p->img_viewver) {
             //p->img_viewver->Render(cmd);
@@ -703,6 +705,7 @@ bool CRenderer::AddImageToMixer(const unsigned char* img_data,int img_size,bool 
     videoMixerTextures[slot].img_viewver->Init(&m_ctx);
     videoMixerTextures[slot].img_viewver->Vulkan_LoadTexture_FromMemory(&videoTextures[slot],img_data, img_size,isHDR);
     videoMixerTextures[slot].inUse = true;
+    videoMixerTextures[slot].busoutIdx = 0;
     videoMixerTextures[slot].layer = 0;
     videoMixerTextures[slot].isVisible = true;
     videoMixerTextures[slot].type = 1;
@@ -921,6 +924,7 @@ Json::Value CRenderer::GetVideoMixerJson() {
         item["scale_y"] = videoinput.scale_y;
         item["alpha"] = videoinput.alpha;
         item["layer"] = videoinput.layer;
+        item["busoutIdx"] = videoinput.busoutIdx;
         CAV_DECODER *decoder = videoinput.AV_DECODER;
         if (decoder && videoinput.originalIdx >-1) {
             item["width"] = decoder->getOutputWidth();

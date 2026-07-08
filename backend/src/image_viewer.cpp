@@ -17,7 +17,11 @@ cimage_viewer::~cimage_viewer() {
 void cimage_viewer::Init(VulkanContext *_ctx) {
     m_ctx = _ctx;
     m_postProcessor = std::make_unique<CPostProcessor>(m_ctx);
-    //m_postProcessor->initRgbaInput(m_texture);
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    poolInfo.queueFamilyIndex = m_ctx->graphicsQueueFamily;
+    vkCreateCommandPool(m_ctx->device, &poolInfo, nullptr, &m_loaderCommandPool);
 }
 
 bool cimage_viewer::CreateRGBAResources(VulkanUniTexture& outTexture,uint32_t _w,uint32_t _h)
@@ -36,9 +40,9 @@ bool cimage_viewer::CreateRGBAResources(VulkanUniTexture& outTexture,uint32_t _w
     imgInfo.arrayLayers   = 1;
     imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
     imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-    imgInfo.usage         = VK_IMAGE_USAGE_STORAGE_BIT          // compute scrive
-                          | VK_IMAGE_USAGE_SAMPLED_BIT          // fragment legge
-                          | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // per eventuale readback
+    imgInfo.usage         = VK_IMAGE_USAGE_STORAGE_BIT
+                          | VK_IMAGE_USAGE_SAMPLED_BIT
+                          | VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
     imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -242,12 +246,8 @@ void cimage_viewer::Vulkan_LoadTexture_FromMemory(VulkanUniTexture* texture,
 }
 
 VkCommandBuffer cimage_viewer::BeginSingleTimeCommands(VulkanContext* _ctx, QueueType type) {
-    VkCommandPool pool;
-    switch (type) {
-        case QueueType::Compute:  pool = _ctx->computeCommandPool;  break;
-        case QueueType::Transfer: pool = _ctx->transferCommandPool; break;
-        default:                  pool = _ctx->graphicsCommandPool; break;
-    }
+
+    VkCommandPool pool = m_loaderCommandPool;
 
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -294,7 +294,7 @@ void cimage_viewer::EndSingleTimeCommands(VulkanContext* _ctx, VkCommandBuffer c
     vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(queue);
 
-    vkFreeCommandBuffers(_ctx->device, pool, 1, &cmd);
+    vkFreeCommandBuffers(_ctx->device, m_loaderCommandPool, 1, &cmd);
 }
 
 void cimage_viewer::Vulkan_CreateBuffer(VulkanContext* ctx, VkDeviceSize size, VkBufferUsageFlags usage,

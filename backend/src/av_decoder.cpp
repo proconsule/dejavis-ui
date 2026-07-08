@@ -252,9 +252,14 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
             opened = tryOpen(hw_device_ctx, AV_PIX_FMT_VULKAN);
             if (opened) {
                 hw_pix_fmt = AV_PIX_FMT_VULKAN;
-                DEJAVISUI_LOG_DEBUG("[DECODER] decode Vulkan attivo");
-                if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
+                DEJAVISUI_LOG_DEBUG("[DECODER] decode Vulkan active");
+                if (m_video_ctx->field_order == AV_FIELD_PROGRESSIVE) {
+                    DEJAVISUI_LOG_INFO("stream flagged as progressive");
+                } else if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
+                    DEJAVISUI_LOG_INFO("stream flagged as interleaved");
                     interlaced = true;
+                } else if (m_video_ctx->field_order == AV_FIELD_UNKNOWN) {
+
                 }
 
             } else {
@@ -268,14 +273,14 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
                 opened = tryOpen(fb, fallbackPixFmt());
                 if (opened) {
                     hw_pix_fmt = fallbackPixFmt();
-                    DEJAVISUI_LOG_DEBUG("[DECODER] decode HW fallback attivo");
+                    DEJAVISUI_LOG_DEBUG("[DECODER] decode HW fallback active");
                     if (m_video_ctx->field_order == AV_FIELD_PROGRESSIVE) {
-                        DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Progressivo");
+                        DEJAVISUI_LOG_INFO("stream flagged as progressive");
                     } else if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
-                        DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Interlacciato");
+                        DEJAVISUI_LOG_INFO("stream flagged as interleaved");
                         interlaced = true;
                     } else if (m_video_ctx->field_order == AV_FIELD_UNKNOWN) {
-                        DEJAVISUI_LOG_INFO("Ordine dei campi non specificato nei metadati del container");
+
                     }
                 }
             }
@@ -286,14 +291,14 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
             opened = tryOpen(nullptr, AV_PIX_FMT_NONE);
             if (opened) {
                 //hw_pix_fmt = AV_PIX_FMT_NONE;
-                DEJAVISUI_LOG_DEBUG("[DECODER] decode software attivo");
+                DEJAVISUI_LOG_DEBUG("[DECODER] decode software active");
                 if (m_video_ctx->field_order == AV_FIELD_PROGRESSIVE) {
-                    DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Progressivo");
+                    DEJAVISUI_LOG_INFO("stream flagged as progressive");
                 } else if (m_video_ctx->field_order == AV_FIELD_TT || m_video_ctx->field_order == AV_FIELD_BB) {
-                    DEJAVISUI_LOG_INFO("Il flusso video è contrassegnato come Interlacciato");
+                    DEJAVISUI_LOG_INFO("stream flagged as interleaved");
                     interlaced = true;
                 } else if (m_video_ctx->field_order == AV_FIELD_UNKNOWN) {
-                    DEJAVISUI_LOG_INFO("Ordine dei campi non specificato nei metadati del container");
+
                 }
             }
         }
@@ -311,9 +316,6 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // 4) Setup audio (invariato).
-    // -------------------------------------------------------------------------
 
     m_audio_stream_idx = av_find_best_stream(m_fmt_ctx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
     if (m_audio_stream_idx >= 0 && m_audio_ring_buffer_planar) {

@@ -48,7 +48,8 @@ void WebRTCBroadcaster::handleOffer(const std::string& session_id, const std::st
         if (it != m_sessions.end()) {
             session = it->second;
         } else {
-            session = std::make_shared<WebRTCSession>(session_id, true, m_signaling_cb);
+            bool use_hevc = m_encoder ? m_encoder->hevc_enabled : false;
+            session = std::make_shared<WebRTCSession>(session_id, true, use_hevc, m_signaling_cb);
 
             // Registriamo la richiesta di keyframe
             session->setKeyframeRequestCallback([this]() {

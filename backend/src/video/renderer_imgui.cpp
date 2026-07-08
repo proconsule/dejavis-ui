@@ -70,7 +70,7 @@ void CRenderer::Init_ImGui() {
     init_info.MinImageCount = 2;
     init_info.ImageCount = m_display.swapchainImages.size();
     //init_info.Allocator = g_Allocator;
-    init_info.PipelineInfoMain.RenderPass = m_master_per_frame[0].renderPass;
+    init_info.PipelineInfoMain.RenderPass = m_videoBusResources[0].m_master_per_frame[0].renderPass;
     init_info.PipelineInfoMain.Subpass = 0;
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -93,7 +93,7 @@ void CRenderer::GUI_Marquee(std::string _id,ImVec2 pos, std::string text, int fo
     ImVec2 textsize = ImGui::CalcTextSize(text.c_str());
     float textWidth = textsize.x;
     float textHeight = textsize.y;
-    float windowWidth = (float)m_master_per_frame[0].image.width;
+    float windowWidth = (float)m_videoBusResources[0].m_master_per_frame[0].image.width;
 
     ImGui::SetNextWindowPos(pos);
     ImGui::SetNextWindowSize(ImVec2(windowWidth, textHeight+5.0)); // Un po' più alto per sicurezza

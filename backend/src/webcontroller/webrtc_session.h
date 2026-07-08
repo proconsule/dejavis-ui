@@ -32,6 +32,7 @@ public:
 
     WebRTCSession(std::string session_id,
                   bool include_audio,
+                  bool use_hevc,
                   SignalingCallback signaling_cb);
 
     ~WebRTCSession();
@@ -57,6 +58,7 @@ public:
 private:
     std::string m_id;
     bool m_include_audio;
+    bool m_use_hevc;
     SignalingCallback m_signaling_cb;
     KeyframeRequestCallback m_keyframe_cb;
 

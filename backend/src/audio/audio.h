@@ -79,6 +79,7 @@ class CAudio
 	CAUDIO_MIXER AUDIO_MIXER;
 
 	MultiChannelRingBuffer srtLiveBuffer_planar{2,4096};
+	MultiChannelRingBuffer webrtcLiveBuffer_planar{2,4096};
 
     void startProcessing();
 	void stop();

@@ -243,11 +243,13 @@ if (_vulkandebug) {
 void CRenderer::Cleanup_Core() {
     vkDeviceWaitIdle(m_ctx.device);
 
-    // 1. Risorse Master per frame
-    for (auto& mr : m_master_per_frame) {
-        DestroyMasterResources(&mr);
+
+    for (auto &mv : m_videoBusResources) {
+        for (auto& mr : mv.m_master_per_frame) {
+            DestroyMasterResources(&mr);
+        }
+        mv.m_master_per_frame.clear();
     }
-    m_master_per_frame.clear();
 
     // 2. Pipeline e Layout del Video Mixer
     if (m_mixerPipeline != VK_NULL_HANDLE) {
@@ -463,10 +465,12 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     if (videoDecodeOk) {
         m_ctx.devExt.push_back(VK_KHR_VIDEO_QUEUE_EXTENSION_NAME);
         m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
-        if (hasExt(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME))
+        if (hasExt(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME)) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME);
-        if (hasExt(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME))
+        }
+        if (hasExt(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME)) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
+        }
         DEJAVISUI_LOG_INFO("[CORE] Vulkan video decode available");
     } else {
         m_ctx.decodeQueueFamily = UINT32_MAX; // forza fallback
@@ -476,11 +480,14 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     bool encMaint1 = false;
     if (videoEncodeOk) {
         m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME);
-        if (hasExt(VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME))
+        if (hasExt(VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME)) {
+            DEJAVISUI_LOG_DEBUG("[CORE] Vulkan H264 video encode available");
             m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME);
-        if (hasExt(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME))
+        }
+        if (hasExt(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME)) {
+            DEJAVISUI_LOG_DEBUG("[CORE] Vulkan HEVC video encode available");
             m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME);
-        // video_maintenance1: richiesta dal codec encode di FFmpeg quando c'e'.
+        }
         if (hasExt(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME)) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
             encMaint1 = true;
@@ -579,15 +586,28 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
     cbAlloc.commandBufferCount = static_cast<uint32_t>(m_ctx.commandBuffers.size());
     vkAllocateCommandBuffers(m_ctx.device, &cbAlloc, m_ctx.commandBuffers.data());
 
-    // --- 9. Resto invariato ---
-    //if (!CreateMasterResources(core_w, core_h)) return false;
-    m_master_per_frame.resize(MAX_FRAMES_IN_FLIGHT);
-    for (auto& mr : m_master_per_frame) {
-        if (!CreateMasterResources(&mr, core_w, core_h)) {
-            DEJAVISUI_LOG_ERROR("[RENDERER] Master resource creation failed");
-            return false;
+
+    // NEW BUS CREATION
+    m_videoBusResources.resize(2); // Two for now A & B
+    m_videoBusResources[0].busId = 0;
+    m_videoBusResources[0].busName = "Bus A";
+    m_videoBusResources[1].busId = 1;
+    m_videoBusResources[1].busName = "Bus B";
+
+
+
+
+    for (auto& mv : m_videoBusResources) {
+        DEJAVISUI_LOG_DEBUG("Creating Bus %s Resources",mv.busName.c_str());
+        mv.m_master_per_frame.resize(MAX_FRAMES_IN_FLIGHT);
+        for (auto& mr : mv.m_master_per_frame) {
+            if (!CreateMasterResources(&mr, core_w, core_h)) {
+                DEJAVISUI_LOG_ERROR("[RENDERER] Master resource creation failed");
+                return false;
+            }
         }
     }
+
     if (!CreateDescriptorPool())                return false;
     if (!CreateDefaultSampler())                return false;
 
@@ -817,8 +837,172 @@ void CRenderer::Render() {
     if (videoMixerTextures[0].isVisible) {
         m_projectm_wrapper->Execute_ProjectM();
     }
+        VkCommandBuffer cmd = m_ctx.commandBuffers[m_display.currentFrame ];
 
-    auto& cur = m_master_per_frame[m_display.currentFrame];
+
+    uint32_t syncIndex  = m_display.currentFrame;
+    uint32_t imageIndex = 0;
+
+    // 1. Aspettiamo che lo SLOT di sincronizzazione sia libero (CPU aspetta GPU)
+    vkWaitForFences(m_ctx.device, 1, &m_display.inFlightFences[m_display.currentFrame], VK_TRUE, UINT64_MAX);
+
+    // 2. Acquisiamo l'immagine dalla swapchain
+    // Usiamo il semaforo imageAvailableSemaphores che verrà segnalato quando l'immagine è pronta
+    VkResult result = vkAcquireNextImageKHR(m_ctx.device, m_display.swapchain, UINT64_MAX,
+                                            m_display.imageAvailableSemaphores[syncIndex],
+                                            VK_NULL_HANDLE, &imageIndex);
+
+    // 3. Gestione errori immediata
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        RecreateSwapChain();
+        return; // Usciamo, la fence non deve essere resettata
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        DEJAVISUI_LOG_ERROR("AcquireNextImage fallita: %d", result);
+        return;
+    }
+
+    // 4. PROTEZIONE EXTRA: Controlliamo se l'immagine fisica è ancora usata da un vecchio frame
+    // m_display.imagesInFlight deve essere un array di VkFence inizializzato a VK_NULL_HANDLE
+    if (m_display.imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+        vkWaitForFences(m_ctx.device, 1, &m_display.imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+
+    // 5. Associamo la fence dello slot corrente all'immagine acquisita
+    m_display.imagesInFlight[imageIndex] = m_display.inFlightFences[syncIndex];
+
+    // 6. RESET FENCE: Solo ora che sappiamo di poter procedere con il submit
+    vkResetFences(m_ctx.device, 1, &m_display.inFlightFences[syncIndex]);
+
+    // --- Da qui in poi puoi procedere con la registrazione dei Command Buffer e il Submit ---
+    // Ricorda di passare 'imageIndex' al tuo framebuffer/renderpass!
+
+    // 5. Selezioniamo il Command Buffer corretto
+    cmd = m_ctx.commandBuffers[syncIndex];
+
+    vkResetCommandBuffer(cmd, 0);
+    VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+
+    vkBeginCommandBuffer(cmd, &beginInfo);
+
+    TracyVkCollect(tracy_ctx, cmd);
+
+    {
+        TracyVkZone(tracy_ctx, cmd, "PreRender");
+        ProcessVideoMixer_PreRenderPass(cmd);
+    }
+
+    // --- CICLO DEI BUS VIDEO ---
+    for (size_t busIdx = 0; busIdx < m_videoBusResources.size(); ++busIdx) {
+        auto& bus = m_videoBusResources[busIdx];
+        auto& curBusRes = bus.m_master_per_frame[m_display.currentFrame];
+
+        // 1. Preparazione RenderPass per il bus corrente
+        VkRenderPassBeginInfo busRpInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+        busRpInfo.renderPass = curBusRes.renderPass;
+        busRpInfo.framebuffer = curBusRes.framebuffer;
+        busRpInfo.renderArea.extent = { curBusRes.image.width, curBusRes.image.height };
+        VkClearValue clearColor = {{{0.00f, 0.00f, 0.00f, 1.0f}}};
+        busRpInfo.clearValueCount = 1;
+        busRpInfo.pClearValues = &clearColor;
+
+        vkCmdBeginRenderPass(cmd, &busRpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        VkViewport viewport{0.0f, 0.0f, (float)curBusRes.image.width, (float)curBusRes.image.height, 0.0f, 1.0f};
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor{{0, 0}, {curBusRes.image.width, curBusRes.image.height}};
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+
+        {
+            TracyVkZone(tracy_ctx, cmd, "Processvideomixer_Bus0");
+            ProcessVideoMixer(cmd,busIdx);
+        }
+
+        if (busIdx == 0) {    // IMGUI on bus 0;
+            {
+                ImGui_Render();
+                ZoneScopedN("ImGui_Render (CPU)");
+            }
+            {
+                TracyVkZone(tracy_ctx, cmd, "IMGUI RenderDrawData");
+                ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+            }
+        }
+
+        vkCmdEndRenderPass(cmd);
+
+        // Fondamentale: Transiziona l'immagine del bus in modo che sia leggibile
+        // come texture dal bus successivo o dal blit finale
+        TransitionImageLayout(cmd, curBusRes.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        // Nota: se il bus successivo deve campionarlo, usa VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    }
+
+    // L'ultimo bus renderizzato è quello che inviamo allo schermo
+    auto& displayBus = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
+
+#ifdef USE_SPOUT
+    if(spout2_sender_active) {
+        sender_SPOUT2.SendImage(m_ctx.physicalDevice, m_ctx.device, cmd,
+                                displayBus.image.image,
+                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                displayBus.image.width, displayBus.image.height, VK_FORMAT_R8G8B8A8_UNORM);
+
+    }
+#endif
+
+    if (AV_ENCODER->isRunning() && AV_ENCODER->HaveServices()) {
+        RGB2YUVSlotResources* slot = AV_ENCODER->acquireSlot();
+        if (slot) {
+            RGB2YUVPipeline::instance().setInputView(*slot, displayBus.image.view);
+            m_pending_encoder_slot = slot;
+            m_pending_encoder_pts  = AV_ENCODER->peekMasterClockUs();
+        } else {
+            m_pending_encoder_slot = nullptr;
+        }
+    }
+
+    if(glfw_active) {
+        TracyVkZone(tracy_ctx, cmd, "BlitToSwapchain");
+
+        VkImageBlit blitRegion{};
+        blitRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blitRegion.srcOffsets[0] = {0, 0, 0};
+        blitRegion.srcOffsets[1] = {(int32_t) displayBus.image.width, (int32_t) displayBus.image.height, 1};
+
+        blitRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        blitRegion.dstOffsets[0] = { (int32_t)m_display.viewport.x, (int32_t)m_display.viewport.y, 0 };
+        blitRegion.dstOffsets[1] = { (int32_t)(m_display.viewport.x + m_display.viewport.width), (int32_t)(m_display.viewport.y + m_display.viewport.height), 1 };
+
+        TransitionImageLayout_RAW(cmd, m_display.swapchainImages[imageIndex],
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        vkCmdBlitImage(cmd,
+                       displayBus.image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       m_display.swapchainImages[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       1, &blitRegion, VK_FILTER_LINEAR);
+
+        TransitionImageLayout_RAW(cmd, m_display.swapchainImages[imageIndex],
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+        // Riporta l'immagine dell'ultimo bus al layout di partenza per il prossimo frame
+        TransitionImageLayout(cmd, displayBus.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    }
+
+    if (m_pending_encoder_slot) {
+        TransitionImageLayout(cmd, displayBus.image, VK_IMAGE_LAYOUT_GENERAL);
+    } else {
+        TransitionImageLayout(cmd, displayBus.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    }
+
+    vkEndCommandBuffer(cmd);
+
+    /*
+
+    auto& cur = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
     if (m_ctx.device == VK_NULL_HANDLE) { printf("DEBUG: device_null\r\n"); return; }
     VkCommandBuffer cmd = m_ctx.commandBuffers[m_display.currentFrame ];
 
@@ -1024,7 +1208,7 @@ void CRenderer::Render() {
 
 
     vkEndCommandBuffer(cmd);
-
+*/
     if (glfw_active) {
         GLFW_Vulkan_Submit(cmd, imageIndex, syncIndex);
         //m_display.currentFrame = (m_display.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1062,12 +1246,12 @@ bool CRenderer::CreateStagingResources(uint32_t w, uint32_t h) {
 
 void CRenderer::CaptureToCPU(VkCommandBuffer cmd, uint32_t w, uint32_t h) {
     // 1. Transizione immagine a TRANSFER_SRC
-    auto& cur = m_master_per_frame[m_display.currentFrame];
+    auto& cur = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
 
     VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.image = m_master_per_frame[0].image.image;
+    barrier.image = m_videoBusResources[0].m_master_per_frame[0].image.image;
     barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
     barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -1135,7 +1319,7 @@ void CRenderer::InitRGB2YUV() {
 #endif
         RGB2YUVPipeline::instance().createSlot(
             slot, core_w, core_h, fmt,
-            m_master_per_frame[0].image.view);
+            m_videoBusResources[0].m_master_per_frame[0].image.view);
     }
 }
 

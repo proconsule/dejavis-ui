@@ -389,9 +389,15 @@ bool YUV2RGBPipeline::submitAsync(YUV2RGBSlotResources& slot) {
     si.pCommandBuffers      = &slot.cmd;
     si.signalSemaphoreCount = 1;
     si.pSignalSemaphores    = &signalSem;
-    VkResult r = VulkanQueueSubmit(m_computeQueue, 1, &si, slot.fence,"YUV2RGBPipeline::submitAsync");
-    if (r != VK_SUCCESS) {
-        DEJAVISUI_LOG_ERROR("[YUV2RGB] vkQueueSubmit async fallito: %d", r);
+
+    VkResult sr;
+    {
+        std::lock_guard<std::mutex> qlk(m_ctx->computeQueueMutexRef());
+        sr = VulkanQueueSubmit(m_computeQueue, 1, &si, slot.fence,"YUV2RGBPipeline::submitAsync");
+    }
+
+    if (sr != VK_SUCCESS) {
+        DEJAVISUI_LOG_ERROR("[YUV2RGB] vkQueueSubmit async fallito: %d", sr);
         return false;
     }
 

@@ -62,6 +62,7 @@ bool cunimixer::AddVideoFilePlayer(int _audio_mixer_id) {
     video_ref->videoMixerTextures[slot].layer = 0;
     video_ref->videoMixerTextures[slot].isVisible = true;
     video_ref->videoMixerTextures[slot].type = 2;
+    video_ref->videoMixerTextures[slot].busoutIdx = 0;
 
     input_item->isActive = true;
     input_item->mixerout_idx = 0;

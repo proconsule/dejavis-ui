@@ -27,7 +27,9 @@ static int audioDeviceOutputCallback(const void *inputBuffer, void *outputBuffer
         unsigned long totalSamples = framesPerBuffer * data->_channels;
 
         std::fill_n(out, totalSamples, 0.0f);
-        std::vector<float> discard(totalSamples);
+        if (data->discardBuffer.size() < totalSamples) {
+            data->discardBuffer.resize(totalSamples);
+        }
         for (RingBuffer* buf : data->buffers) {
             if (buf != nullptr) {
                 if (buf->getAvailableRead() >= totalSamples) {
@@ -36,7 +38,7 @@ static int audioDeviceOutputCallback(const void *inputBuffer, void *outputBuffer
                         buf->read(out, totalSamples);
                     } else {
 
-                        buf->read(discard.data(), totalSamples);
+                        buf->read(data->discardBuffer.data(), totalSamples);
                     }
 
                 } else {

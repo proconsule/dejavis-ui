@@ -83,6 +83,7 @@ int main(int argc, char* argv[]) {
     Json::Value audio_config = userconfig.getConfig()["audio"];;
     Json::Value general_config = userconfig.getConfig()["general"];
     Json::Value srt_out_config = userconfig.getConfig()["srt_output"];
+    Json::Value webrtc_config = userconfig.getConfig()["webrtc_output"];
     Json::Value ndi_out_config = userconfig.getConfig()["ndi_output"];;
 
 
@@ -165,17 +166,23 @@ int main(int argc, char* argv[]) {
     Renderer.videoMixerTextures[0].inUse = true;
     Renderer.videoMixerTextures[0].type = 0;
     Renderer.videoMixerTextures[0].isVisible = true;
+    Renderer.videoMixerTextures[0].busoutIdx = 0;  // For now use the first bus
     projectm_wrapper.PostProcessInit();
     Renderer.Init_ImGui();
 
     /* UGLY JUST FOR TESTING */
     Renderer.ffmpeg_vk_ctx =  Renderer.CreateFFmpegVulkanHWContext();
 
+    AV_Encoder.internal_encoder = true;
+    AV_Encoder.hevc_enabled = webrtc_config["hevc_enable"].asBool();
     AV_Encoder.InitHW(&Renderer.m_ctx);
+
+
     AV_Encoder.InitVulkanEncoderHW(Renderer.ffmpeg_vk_ctx);
-    AV_Encoder.init(ndi_out_config["enabled"].asBool(),Renderer.core_w,Renderer.core_h,srt_out_config["video_bitrate"].asInt(),srt_out_config["audio_bitrate"].asInt(),Audio.AUDIO_MIXER.master_samplerate,&Audio.srtLiveBuffer_planar);
+    AV_Encoder.init(ndi_out_config["enabled"].asBool(),Renderer.core_w,Renderer.core_h,webrtc_config["video_bitrate"].asInt(),webrtc_config["audio_bitrate"].asInt(),Audio.AUDIO_MIXER.master_samplerate,&Audio.webrtcLiveBuffer_planar);
     Audio.av_ndi_sender = &AV_Encoder.m_ndi_sender;
 
+    AV_Encoder.addWebRtcOutput();
     Renderer.InitRGB2YUV();
 
     if (!YUV2RGBPipeline::instance().isInitialized()) {
@@ -184,11 +191,8 @@ int main(int argc, char* argv[]) {
         }
     }
     YUV2RGBPipeline::instance().setMixerDescriptorLayout(Renderer.m_ctx.m_mixerDescriptorLayout);
-    std::string srt_url = "srt://0.0.0.0:5000?mode=listener&latency=20&payload_size=1316";
 
-    if (srt_out_config["enabled"].asBool()) {
-        AV_Encoder.addOutput(srt_url,"mpegts");
-    }
+
 
 #ifdef USE_SPOUT
     Renderer.Init_SPOUT2();

@@ -61,11 +61,19 @@ void main() {
     float alpha = smoothstep(pc.threshold, pc.threshold + pc.softness, d);
 
     if (pc.spill > 0.0) {
-        float gExcess = c.g - max(c.r, c.b);
-        if (gExcess > 0.0) {
+            vec3 key = pc.keyColor;
+            float isRed    = step(max(key.g, key.b), key.r);
+            float isGreen  = step(max(key.r, key.b), key.g);
+            float isBlue   = step(max(key.r, key.g), key.b);
+
+            float rExcess = max(0.0, c.r - max(c.g, c.b)) * isRed;
+            float gExcess = max(0.0, c.g - max(c.r, c.b)) * isGreen;
+            float bExcess = max(0.0, c.b - max(c.r, c.g)) * isBlue;
+
+            c.r -= rExcess * pc.spill;
             c.g -= gExcess * pc.spill;
+            c.b -= bExcess * pc.spill;
         }
-    }
 
     imageStore(outputImage, p, vec4(c.rgb, c.a * alpha));
 }

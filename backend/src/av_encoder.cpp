@@ -136,7 +136,8 @@ void CAV_ENCODER::releaseSlotPool() {
 
 RGB2YUVSlotResources* CAV_ENCODER::acquireSlot() {
     if (!m_running.load(std::memory_order_relaxed)) return nullptr;
-    if (m_active_services_count.load(std::memory_order_relaxed) == 0) return nullptr;
+    if (m_active_services_count.load(std::memory_order_relaxed) == 0 &&
+        !m_has_webrtc_consumer.load(std::memory_order_relaxed)) return nullptr;
 
     std::lock_guard<std::mutex> lock(m_queue_mutex);
     if (m_free_slots.empty()) {
@@ -157,6 +158,12 @@ void CAV_ENCODER::submitSlot(RGB2YUVSlotResources* slot, int64_t pts_us) {
         m_ready_slots.push_back(slot);
     }
     m_queue_cv.notify_one();
+}
+
+void CAV_ENCODER::addWebRtcOutput() {
+    DEJAVISUI_LOG_INFO("[ENCODER] Abilitazione output WebRTC...");
+    m_has_webrtc_consumer.store(true, std::memory_order_release);
+    DEJAVISUI_LOG_INFO("[ENCODER] WebRTC Output flag enabled");
 }
 
 void CAV_ENCODER::addOutput(const std::string& url, const std::string& format) {
@@ -216,7 +223,9 @@ void CAV_ENCODER::pushToServices(AVPacket* pkt, bool is_video) {
 
     if (cb_copy) {
         AVCodecContext* src_codec = is_video ? m_video_codec_ctx : m_audio_codec_ctx;
-        cb_copy(pkt, is_video, src_codec->time_base);
+        if (src_codec) {
+            cb_copy(pkt, is_video, src_codec->time_base);
+        }
     }
 
     if (m_active_services_count.load(std::memory_order_acquire) == 0) return;
@@ -349,29 +358,42 @@ bool CAV_ENCODER::TryVideoEncoder(std::string name,int width, int height, int bi
 
     // Trova il pix_fmt giusto per questo encoder
     AVPixelFormat pf = AV_PIX_FMT_NV12;
-    for (auto& c : kCandidates) {
-        if (std::string(c.name) == name) { pf = c.input_format; break; }
+    if (hevc_enabled) {
+        for (auto& c : hevc_kCandidates) {
+            if (std::string(c.name) == name) { pf = c.input_format; break; }
+        }
+    }else {
+        for (auto& c : h264_kCandidates) {
+            if (std::string(c.name) == name) { pf = c.input_format; break; }
+        }
     }
+
 
     ctx->width        = width;
     ctx->height       = height;
     ctx->time_base    = {1, 1000000};
     ctx->framerate    = {60, 1};
     ctx->bit_rate     = bitrate;
-    ctx->gop_size     = 60;
+    ctx->gop_size     = 120;
     ctx->keyint_min   = 60;
     ctx->max_b_frames = 0;
     ctx->pix_fmt      = pf;
-    ctx->profile      = AV_PROFILE_H264_HIGH;
-
+    if (hevc_enabled) {
+        ctx->profile      = AV_PROFILE_HEVC_MAIN;
+    }
+    else {
+        ctx->profile      = AV_PROFILE_H264_HIGH;
+    }
     const std::string nm = name;
-    if (nm == "h264_vulkan") {
+    if (nm == "h264_vulkan" || nm == "hevc_vulkan") {
         if (m_ctx->encodeQueueFamily == std::numeric_limits<uint32_t>::max() || !m_hw_device_ref) {
             avcodec_free_context(&ctx); return false;   // nessun encode Vulkan
         }
-        if (!InitFramesContext(width, height)) { avcodec_free_context(&ctx); return false; }
+
+        AVPixelFormat target_sw_fmt = (nm == "hevc_vulkan") ? AV_PIX_FMT_NV12 : AV_PIX_FMT_NV12;
+        if (!InitFramesContext(width, height, target_sw_fmt)) { avcodec_free_context(&ctx); return false; }
         ctx->pix_fmt       = AV_PIX_FMT_VULKAN;
-        ctx->sw_pix_fmt    = AV_PIX_FMT_NV12;
+        ctx->sw_pix_fmt    = target_sw_fmt; // <--- Allineato al contesto hw frames
         ctx->hw_device_ctx = av_buffer_ref(m_hw_device_ref);
         ctx->hw_frames_ctx = av_buffer_ref(m_hw_frames_ref);
         int r = avcodec_open2(ctx, codec, nullptr);
@@ -444,11 +466,20 @@ bool CAV_ENCODER::TryVideoEncoder_MacOS(std::string name,int width, int height, 
     AVCodecContext* ctx = avcodec_alloc_context3(codec);
     if (!ctx) return false;
 
-    // Trova il pix_fmt giusto per questo encoder
-    AVPixelFormat pf = AV_PIX_FMT_YUV420P;
-    for (auto& c : kCandidates) {
-        if (std::string(c.name) == name) { pf = c.input_format; break; }
+
+    AVPixelFormat pf = AV_PIX_FMT_NV12;
+    if (hevc_enabled) {
+        AVPixelFormat pf = AV_PIX_FMT_YUV420P;
+        for (auto& c : hevc_kCandidates) {
+            if (std::string(c.name) == name) { pf = c.input_format; break; }
+        }
+    }else {
+        AVPixelFormat pf = AV_PIX_FMT_YUV420P;
+        for (auto& c : h264_kCandidates) {
+            if (std::string(c.name) == name) { pf = c.input_format; break; }
+        }
     }
+
 
     ctx->width        = width;
     ctx->height       = height;
@@ -489,16 +520,30 @@ bool CAV_ENCODER::TryVideoEncoder_MacOS(std::string name,int width, int height, 
 bool CAV_ENCODER::setupVideo(int width, int height, int bitrate) {
 
 
-    for (const auto& cand : kCandidates) {
+    if (hevc_enabled) {
+        for (const auto& cand : hevc_kCandidates) {
 #ifdef __APPLE__
-        if (TryVideoEncoder_MacOS(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
-        DEJAVISUI_LOG_DEBUG("Init MP4 -> ANNEX_B");
+            if (TryVideoEncoder_MacOS(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
+            DEJAVISUI_LOG_DEBUG("Init MP4 -> ANNEX_B");
 
 #else
-        if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
+            if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
 
 #endif
+        }
+    }else {
+        for (const auto& cand : h264_kCandidates) {
+#ifdef __APPLE__
+            if (TryVideoEncoder_MacOS(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
+            DEJAVISUI_LOG_DEBUG("Init MP4 -> ANNEX_B");
+
+#else
+            if (TryVideoEncoder(cand.name,width,height,bitrate,&m_video_codec_ctx,&m_choosen_pixfmt))break;
+
+#endif
+        }
     }
+
 #ifdef __APPLE__
     m_bsf_ctx = init_bsf_filter(m_video_codec_ctx);
 #endif
@@ -543,9 +588,10 @@ bool CAV_ENCODER::setupAudio(int sample_rate, int channels,int bitrate) {
 }
 
 void CAV_ENCODER::pushFrame() {
-    if (!m_running || m_active_services_count.load(std::memory_order_relaxed) == 0) {
-        return;
-    }
+    if (!m_running || (m_active_services_count.load(std::memory_order_relaxed) == 0 &&
+                          !m_has_webrtc_consumer.load(std::memory_order_relaxed))) {
+                            return;
+                          }
 
     m_masterclock.update();
 
@@ -602,7 +648,8 @@ void CAV_ENCODER::audioLoop() {
 
     while (m_running) {
 
-        if (m_active_services_count.load(std::memory_order_relaxed) == 0) {
+        if (m_active_services_count.load(std::memory_order_relaxed) == 0 &&
+                !m_has_webrtc_consumer.load(std::memory_order_relaxed)) {
             m_audio_ring_buffer_planar->reset();
             first_sample_done   = false;
             m_audio_pts_counter = 0;
@@ -677,7 +724,6 @@ void CAV_ENCODER::audioLoop() {
         if (avcodec_send_frame(m_audio_codec_ctx, m_audio_frame) >= 0) {
             AVPacket* pkt = av_packet_alloc();
             while (avcodec_receive_packet(m_audio_codec_ctx, pkt) >= 0) {
-
                 pushToServices(pkt, false);
                 av_packet_unref(pkt);
             }
@@ -693,7 +739,8 @@ void CAV_ENCODER::videoLoop() {
 
     while (m_running.load(std::memory_order_relaxed)) {
         // Se non ci sono servizi, svuota la ready queue rimettendo gli slot come free.
-        if (m_active_services_count.load(std::memory_order_relaxed) == 0) {
+        if (m_active_services_count.load(std::memory_order_relaxed) == 0 &&
+                !m_has_webrtc_consumer.load(std::memory_order_relaxed)) {
             std::unique_lock<std::mutex> lock(m_queue_mutex);
             while (!m_ready_slots.empty()) {
                 m_free_slots.push_back(m_ready_slots.front());
@@ -1089,20 +1136,23 @@ void CAV_ENCODER::requestKeyframe() {
 }
 
 
-bool CAV_ENCODER::InitFramesContext(uint32_t w, uint32_t h) {
+bool CAV_ENCODER::InitFramesContext(uint32_t w, uint32_t h, AVPixelFormat sw_format) {
     m_hw_frames_ref = av_hwframe_ctx_alloc(m_hw_device_ref);   // device Vulkan condiviso
     if (!m_hw_frames_ref) return false;
 
     auto* fc = reinterpret_cast<AVHWFramesContext*>(m_hw_frames_ref->data);
     fc->format    = AV_PIX_FMT_VULKAN;
-    fc->sw_format  = AV_PIX_FMT_NV12;
+    fc->sw_format  = sw_format;
     fc->width      = w;
     fc->height     = h;
     fc->initial_pool_size = SLOT_COUNT;
 
     auto* vkfc = reinterpret_cast<AVVulkanFramesContext*>(fc->hwctx);
 
-    vkfc->usage = (VkImageUsageFlagBits)(VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    vkfc->usage = (VkImageUsageFlagBits)(VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                  VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR |
+                  VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR);
 
     if (av_hwframe_ctx_init(m_hw_frames_ref) < 0) {
         av_buffer_unref(&m_hw_frames_ref);

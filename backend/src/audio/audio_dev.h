@@ -14,6 +14,7 @@ using ClockTickCallback = std::function<void(unsigned long frames)>;
 
 struct cdejavisaudio_dev_buffer_struct {
     std::vector<RingBuffer*> buffers;
+    std::vector<float> discardBuffer;
     RingBuffer* master_output_buffer = nullptr;
     int32_t _channels;
 };

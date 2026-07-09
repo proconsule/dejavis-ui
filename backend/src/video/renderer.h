@@ -366,6 +366,8 @@ public:
 
 	VkDescriptorPool imguiPool;
 
+	int webrtc_bus_preview = 0;
+
     projectm_handle _projectM{nullptr};
     projectm_playlist_handle _playlist{nullptr};
     void initProjectM(const std::string& presetPath, int width, int height);

@@ -53,17 +53,17 @@ public:
 
     void Init(CAudio * _audio,CRenderer *_video);
 
+    void AssignVideoBus(int videolayeridx, int busidx);
+
     bool AddAudioPlayer(int _mixerd = -1);
 
-    bool AddVideoFilePlayer(int _audio_mixer_id = -1);
+    bool AddVideoFilePlayer(int _audio_mixer_id = -1,int busidx = 0);
 
     void RemoveVideoFilePlayer(int _audio_mixer_id);
 
-    bool AddImage(const unsigned char *img_data, int img_size, bool isHDR = false);
+    bool AddImage(const unsigned char *img_data, int img_size,int busidx = 0);
 
-    bool AddNDI(int _audio_mixer_id = -1);
-
-    bool AddNDIToMixer(int _audio_mixer_id = -1);
+    bool AddNDI(int _audio_mixer_id = -1,int busidx = 0);
 
     void setAudioBasePath(std::string _basepath) {
         audio_base_path = _basepath;
@@ -122,6 +122,8 @@ public:
     void RemoveInputAudioFX(int _idx,int _fxpos);
 
     void ReconfigureInputFX(int _idx,int _fxpos,audio_utils::EffectBank::SlotConfig mycfg);
+
+    void SetWebRTC_Preview_BUS(int _busidx);
 
     Json::Value getMixerStatus();
 

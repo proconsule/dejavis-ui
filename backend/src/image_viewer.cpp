@@ -98,7 +98,7 @@ VkImageMemoryBarrier cimage_viewer::get_value1() {
 
 void cimage_viewer::Vulkan_LoadTexture_FromMemory(VulkanUniTexture* texture,
                                                   const unsigned char* img_data,
-                                                  int img_size, bool isHDR) {
+                                                  int img_size) {
     m_texture = texture;
 
     if (!img_data || img_size <= 0) {

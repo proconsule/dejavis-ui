@@ -933,21 +933,22 @@ void CRenderer::Render() {
 
         vkCmdEndRenderPass(cmd);
 
-        // Fondamentale: Transiziona l'immagine del bus in modo che sia leggibile
-        // come texture dal bus successivo o dal blit finale
         TransitionImageLayout(cmd, curBusRes.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        // Nota: se il bus successivo deve campionarlo, usa VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     }
 
     // L'ultimo bus renderizzato è quello che inviamo allo schermo
     auto& displayBus = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
+    auto& webrtc_video_Bus = m_videoBusResources[webrtc_bus_preview].m_master_per_frame[m_display.currentFrame];
+    auto& spout_video_Bus = m_videoBusResources[webrtc_bus_preview].m_master_per_frame[m_display.currentFrame];
+
+
 
 #ifdef USE_SPOUT
     if(spout2_sender_active) {
         sender_SPOUT2.SendImage(m_ctx.physicalDevice, m_ctx.device, cmd,
-                                displayBus.image.image,
+                                spout_video_Bus.image.image,
                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                displayBus.image.width, displayBus.image.height, VK_FORMAT_R8G8B8A8_UNORM);
+                                spout_video_Bus.image.width, spout_video_Bus.image.height, VK_FORMAT_R8G8B8A8_UNORM);
 
     }
 #endif
@@ -955,7 +956,7 @@ void CRenderer::Render() {
     if (AV_ENCODER->isRunning() && AV_ENCODER->HaveServices()) {
         RGB2YUVSlotResources* slot = AV_ENCODER->acquireSlot();
         if (slot) {
-            RGB2YUVPipeline::instance().setInputView(*slot, displayBus.image.view);
+            RGB2YUVPipeline::instance().setInputView(*slot, webrtc_video_Bus.image.view);
             m_pending_encoder_slot = slot;
             m_pending_encoder_pts  = AV_ENCODER->peekMasterClockUs();
         } else {

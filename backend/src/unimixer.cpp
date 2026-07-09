@@ -16,6 +16,8 @@ void cunimixer::Init(CAudio *_audio, CRenderer *_video) {
     video_ref = _video;
 }
 
+
+
 bool cunimixer::AddAudioPlayer(int _mixerd) {
     int _testaudioid = _mixerd;
     if (_testaudioid == -1) {
@@ -39,8 +41,11 @@ bool cunimixer::AddAudioPlayer(int _mixerd) {
     return true;
 }
 
+void cunimixer::AssignVideoBus(int videolayeridx,int busidx) {
+    video_ref->videoMixerTextures[videolayeridx].busoutIdx = busidx;
+}
 
-bool cunimixer::AddVideoFilePlayer(int _audio_mixer_id) {
+bool cunimixer::AddVideoFilePlayer(int _audio_mixer_id,int busidx) {
     int slot = video_ref->FindFreeVideoMixerSlot();
     if (slot < 0) {
         return false;
@@ -62,7 +67,7 @@ bool cunimixer::AddVideoFilePlayer(int _audio_mixer_id) {
     video_ref->videoMixerTextures[slot].layer = 0;
     video_ref->videoMixerTextures[slot].isVisible = true;
     video_ref->videoMixerTextures[slot].type = 2;
-    video_ref->videoMixerTextures[slot].busoutIdx = 0;
+    AssignVideoBus(slot,busidx);
 
     input_item->isActive = true;
     input_item->mixerout_idx = 0;
@@ -105,22 +110,23 @@ void cunimixer::RemoveVideoFilePlayer(int _audio_mixer_id) {
 
 }
 
-bool cunimixer::AddImage(const unsigned char* img_data,int img_size,bool isHDR) {
+bool cunimixer::AddImage(const unsigned char* img_data,int img_size,int busidx) {
     int slot = video_ref->FindFreeVideoMixerSlot();
     if (slot < 0) {
         return false;
     }
     video_ref->videoMixerTextures[slot].img_viewver = new cimage_viewer();
     video_ref->videoMixerTextures[slot].img_viewver->Init(&video_ref->m_ctx);
-    video_ref->videoMixerTextures[slot].img_viewver->Vulkan_LoadTexture_FromMemory(&video_ref->videoTextures[slot],img_data, img_size,isHDR);
+    video_ref->videoMixerTextures[slot].img_viewver->Vulkan_LoadTexture_FromMemory(&video_ref->videoTextures[slot],img_data, img_size);
     video_ref->videoMixerTextures[slot].inUse = true;
     video_ref->videoMixerTextures[slot].layer = 0;
     video_ref->videoMixerTextures[slot].isVisible = true;
     video_ref->videoMixerTextures[slot].type = 1;
+    AssignVideoBus(slot,busidx);
     return true;
 }
 
-bool cunimixer::AddNDI(int _audio_mixer_id) {
+bool cunimixer::AddNDI(int _audio_mixer_id,int busidx) {
     int slot = video_ref->FindFreeVideoMixerSlot();
     if (slot < 0) {
         return false;
@@ -150,6 +156,7 @@ bool cunimixer::AddNDI(int _audio_mixer_id) {
     video_ref->videoMixerTextures[slot].audiomixerid = _testaudioid;
     video_ref->videoMixerTextures[slot].ndi_receiver = new CNDIReceiver();
     video_ref->videoMixerTextures[slot].ndi_receiver->Init_VideoAudio(&video_ref->m_ctx,&video_ref->videoTextures[slot],input_item->buffer_planar.get(),48000,2);
+    AssignVideoBus(slot,busidx);
     return true;
 }
 
@@ -401,4 +408,9 @@ void cunimixer::RemoveInputAudioFX(int _idx, int _fxpos) {
 
 void cunimixer::ReconfigureInputFX(int _idx, int _fxpos, audio_utils::EffectBank::SlotConfig mycfg) {
     audio_ref->AUDIO_MIXER.input_effectBank.ReconfigureEffect(_idx,_fxpos,mycfg);
+}
+
+
+void cunimixer::SetWebRTC_Preview_BUS(int _busidx) {
+    video_ref->webrtc_bus_preview = _busidx;
 }

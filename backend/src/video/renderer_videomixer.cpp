@@ -703,7 +703,7 @@ bool CRenderer::AddImageToMixer(const unsigned char* img_data,int img_size,bool 
     }
     videoMixerTextures[slot].img_viewver = new cimage_viewer();
     videoMixerTextures[slot].img_viewver->Init(&m_ctx);
-    videoMixerTextures[slot].img_viewver->Vulkan_LoadTexture_FromMemory(&videoTextures[slot],img_data, img_size,isHDR);
+    videoMixerTextures[slot].img_viewver->Vulkan_LoadTexture_FromMemory(&videoTextures[slot],img_data, img_size);
     videoMixerTextures[slot].inUse = true;
     videoMixerTextures[slot].busoutIdx = 0;
     videoMixerTextures[slot].layer = 0;

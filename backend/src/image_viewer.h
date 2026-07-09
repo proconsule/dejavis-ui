@@ -54,7 +54,7 @@ public:
     cimage_viewer();
     ~cimage_viewer();
     void Init(VulkanContext * _ctx);
-    void Vulkan_LoadTexture_FromMemory(VulkanUniTexture * texture,const unsigned char* img_data,int img_size,bool isHDR);
+    void Vulkan_LoadTexture_FromMemory(VulkanUniTexture * texture,const unsigned char* img_data,int img_size);
 
     bool CreateRGBAResources(VulkanUniTexture& outTexture,uint32_t _w,uint32_t _h);
 

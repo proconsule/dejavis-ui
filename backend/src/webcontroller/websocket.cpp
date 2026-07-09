@@ -782,6 +782,15 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 		}
 
 
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SET_WEBRTC_PREVIEW_BUS) {
+			int webrtc_videobusidx = json["webrtc_videobusidx"].asInt();
+			if (webrtc_videobusidx>=0) {
+				m_cunimixer->SetWebRTC_Preview_BUS(webrtc_videobusidx);
+			}
+		}
+
+
 	}
     DEJAVISUI_LOG_DEBUG("new websocket message: %s",message.c_str());
 

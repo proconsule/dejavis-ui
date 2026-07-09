@@ -13,6 +13,7 @@ import { Decimal } from 'decimal.js';
 import {ChromaKeyControl} from "@/components/video/chromacontrol.tsx";
 import {LumaKeyControl} from "@/components/video/lumacontrol.tsx";
 import {Marquee} from "@/components/ui/marquee.tsx";
+import {BusSelector_External, BusSelector_Layer} from "@/components/video/videobus_utils.tsx";
 
 // =================================================================
 //  TYPES
@@ -74,6 +75,7 @@ type MixerInput = {
     inUse: boolean; isVisible: boolean; layer: number;
     pos_x: number; pos_y: number; scale_x: number; scale_y: number;
     type: number; keepaspect: boolean; y_flip?: boolean;
+    busoutIdx: number;
     chromakey: ChromaKeyParams;
     lumakey : LumaKeyParams;
     color: ColorParams;
@@ -89,6 +91,9 @@ type MixerInput = {
 };
 
 type MixerData = {
+    webrtc_bus:number;
+    display_bus:number;
+    spout2_bus:number;
     videomixer: { inputs: MixerInput[] };
     core_h: number; core_w: number;
     window_w: number; window_h: number;
@@ -118,6 +123,7 @@ const defaultFileDecoder: filedecoder_data = {
 const makeDefaultInput = (): MixerInput => ({
     alpha: 1, height: 0, width: 0, inUse: false, isVisible: true, layer: 0,
     pos_x: 0, pos_y: 0, scale_x: 1, scale_y: 1, type: -1,
+    busoutIdx:0,
     keepaspect: false, y_flip: false,
     chromakey: { ...defaultChroma },
     lumakey:{...defaultLuma },
@@ -418,7 +424,7 @@ function SidebarItem({ idx, input, selected, onSelect, onContextMenu, onToggleVi
                     <span>α:{(input.alpha * 100).toFixed(0)}%</span>
                 </div>
                 <div className="flex gap-2 items-center">
-                    {input.keepaspect && <span className="text-amber-500/80 font-bold text-[8px]">FIXED-AR</span>}
+                    <span className="text-green-500/80 font-bold text-[8px]">{input.busoutIdx === 0 ? "BUS A" : "BUS B"}</span>
                     {!input.isVisible && <span className="text-slate-600 italic">hidden</span>}
                 </div>
             </div>
@@ -433,13 +439,18 @@ export function VideoMixerDashboard() {
     const { lastJsonMessage, sendMessage } = useWS();
     const { state, start, stop } = useGlobalWebRTC();
 
+    const [webRtcBus, setWebRtcBus] = useState(0);
+    const [spout2Bus, setspout2Bus] = useState(0);
+    const [displayBus, setdisplayBus] = useState(0);
+
     const [mixerData, setMixerData] = useState<MixerData>({
+        webrtc_bus:0,spout2_bus:0,display_bus:0,
         videomixer: { inputs: Array.from({ length: 10 }, makeDefaultInput) },
         core_h: 1080, core_w: 1920, window_w: 1920, window_h: 1080,
     });
 
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [activeTab, setActiveTab] = useState<'transform' | 'chroma' | 'luma' | 'color'>('transform');
+    const [activeTab, setActiveTab] = useState<'bus'|'transform' | 'chroma' | 'luma' | 'color'>('transform');
 
     const [ctxMenu, setCtxMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, inputIndex: -1 });
 
@@ -461,6 +472,12 @@ export function VideoMixerDashboard() {
                     })),
                 },
             };
+            const webrtc_bus = incoming.webrtc_bus;
+            const display_bus = incoming.display_bus;
+            const spout2_bus = incoming.spout2_bus;
+            setspout2Bus(spout2_bus);
+            setWebRtcBus(webrtc_bus);
+            setdisplayBus(display_bus);
             setMixerData(merged);
         }
     }, [lastJsonMessage]);
@@ -523,6 +540,25 @@ export function VideoMixerDashboard() {
     const removeInput = (index: number) => sendMessage({ msgid: 8011, input_index: index });
 
     const handleNDIRemove = (index: number) => sendMessage({ msgid: 9001, video_index: index });
+
+    const handleWebRTCBusChange = (value: number) => {
+        setWebRtcBus(value);
+        sendMessage({ msgid: 10002, webrtc_videobusidx: value });
+    };
+
+    const handleSPOUT2Change = (value: number) => {
+        setspout2Bus(value);
+        sendMessage({ msgid: 10003, spout_videobusidx: value });
+    };
+
+    const handleDisplayBusChange = (value: number) => {
+        setdisplayBus(value);
+        sendMessage({ msgid: 10004, display_videobusidx: value });
+    };
+
+    const handleLayerBusChange = (idx:number,value: number) => {
+        sendMessage({ msgid: 10001, videoidx: idx, busidx: value });
+    };
 
     const toggleBicubic = (index: number, active: boolean) => {
         sendMessage({
@@ -650,6 +686,7 @@ export function VideoMixerDashboard() {
 
     console.log(mixerData)
 
+
     return (
         <div className={`p-6 ${dashTm.bgColor} ${dashTm.color} rounded-xl border ${dashTm.borderColor} flex flex-col gap-6 shadow-2xl font-sans`}>
             {/* Context menu */}
@@ -709,6 +746,9 @@ export function VideoMixerDashboard() {
                             />
                         ))}
                     </div>
+                    <BusSelector_External label={"DISPLAY BUS"} value={displayBus} onChange={handleDisplayBusChange} />
+                    <BusSelector_External label={"WebRTC BUS"} value={webRtcBus} onChange={handleWebRTCBusChange} />
+                    <BusSelector_External label={"SPOUT2 BUS"} value={spout2Bus} onChange={handleSPOUT2Change} />
                 </div>
 
                 {/* --- PREVIEW AREA --- */}
@@ -802,7 +842,7 @@ export function VideoMixerDashboard() {
                     {/* --- CONTROLS TABS --- */}
                     <div className="mt-4 w-full bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
                         <div className="flex gap-1 border-b border-slate-700 p-1 bg-slate-800">
-                            {(['transform', 'chroma','luma', 'color'] as const).map(tab => (
+                            {(['bus','transform', 'chroma','luma', 'color'] as const).map(tab => (
                                 <button key={tab} onClick={() => setActiveTab(tab)}
                                         className={`text-[10px] uppercase font-bold px-4 py-2 rounded flex-1 transition-colors ${activeTab === tab ? 'bg-slate-700 text-emerald-400' : 'text-slate-400 hover:bg-slate-700/50'}`}>
                                     {tab}
@@ -811,6 +851,13 @@ export function VideoMixerDashboard() {
                         </div>
 
                         <div className="p-4 min-h-[240px]">
+                            {activeTab === 'bus' && (
+                                < BusSelector_Layer
+                                    video_input_idx={selectedIndex}
+                                    value={selectedInput.busoutIdx}
+                                    onChange={handleLayerBusChange}
+                                />
+                            )}
                             {/* TAB TRANSFORM */}
                             {activeTab === 'transform' && (
                                 <div className="flex flex-col gap-6">

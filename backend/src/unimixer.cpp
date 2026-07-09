@@ -414,3 +414,11 @@ void cunimixer::ReconfigureInputFX(int _idx, int _fxpos, audio_utils::EffectBank
 void cunimixer::SetWebRTC_Preview_BUS(int _busidx) {
     video_ref->webrtc_bus_preview = _busidx;
 }
+
+void cunimixer::SetSPOUT2_Preview_BUS(int _busidx) {
+    video_ref->spout2_bus_preview = _busidx;
+}
+
+void cunimixer::SetDisplay_BUS(int _busidx) {
+    video_ref->display_bus_preview = _busidx;
+}

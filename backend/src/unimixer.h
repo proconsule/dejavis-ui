@@ -124,6 +124,9 @@ public:
     void ReconfigureInputFX(int _idx,int _fxpos,audio_utils::EffectBank::SlotConfig mycfg);
 
     void SetWebRTC_Preview_BUS(int _busidx);
+    void SetSPOUT2_Preview_BUS(int _busidx);
+    void SetDisplay_BUS(int _busidx);
+
 
     Json::Value getMixerStatus();
 

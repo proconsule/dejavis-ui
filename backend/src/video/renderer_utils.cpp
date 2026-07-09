@@ -45,18 +45,21 @@ uint32_t CRenderer::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags pr
 Json::Value CRenderer::getRendererStatusJson() {
     Json::Value status;
 
-    // 1. Stato Generale
     status["running"] = gpu_active;
     status["gpu_active"] = gpu_active;
     status["glfw_active"] = glfw_active;
 
     status["frameCount"] = framecount;
-    status["fps"] = std::round(dejatimer.get_fps() * 100.0f) / 100.0f; // Arrotonda a 2 decimali
+    status["fps"] = std::round(dejatimer.get_fps() * 100.0f) / 100.0f;
     status["frameTimeMs"] = dejatimer.get_delta_time() * 1000.0f;
     status["window_w"] = window_w;
     status["window_h"] = window_h;
     status["core_w"] = core_w;
     status["core_h"] = core_h;
+    status["webrtc_bus"] = webrtc_bus_preview;
+    status["display_bus"] = display_bus_preview;
+    status["spout2_bus"] = spout2_bus_preview;
+
 
 
 

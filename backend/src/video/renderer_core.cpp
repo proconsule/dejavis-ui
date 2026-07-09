@@ -937,9 +937,9 @@ void CRenderer::Render() {
     }
 
     // L'ultimo bus renderizzato è quello che inviamo allo schermo
-    auto& displayBus = m_videoBusResources[0].m_master_per_frame[m_display.currentFrame];
+    auto& displayBus = m_videoBusResources[display_bus_preview].m_master_per_frame[m_display.currentFrame];
     auto& webrtc_video_Bus = m_videoBusResources[webrtc_bus_preview].m_master_per_frame[m_display.currentFrame];
-    auto& spout_video_Bus = m_videoBusResources[webrtc_bus_preview].m_master_per_frame[m_display.currentFrame];
+    auto& spout_video_Bus = m_videoBusResources[spout2_bus_preview].m_master_per_frame[m_display.currentFrame];
 
 
 

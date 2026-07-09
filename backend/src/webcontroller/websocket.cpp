@@ -783,10 +783,32 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 
 
 
+		if (getMsgId(json) == DEJAVISUI_MSGID::ASSIGN_VIDEO_BUS) {
+			int videoidx = json["videoidx"].asInt();
+			int busidx = json["busidx"].asInt();
+			if (videoidx>=0) {
+				m_cunimixer->AssignVideoBus(videoidx,busidx);
+			}
+		}
+
 		if (getMsgId(json) == DEJAVISUI_MSGID::SET_WEBRTC_PREVIEW_BUS) {
 			int webrtc_videobusidx = json["webrtc_videobusidx"].asInt();
 			if (webrtc_videobusidx>=0) {
 				m_cunimixer->SetWebRTC_Preview_BUS(webrtc_videobusidx);
+			}
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SET_SPOUT_PREVIEW_BUS) {
+			int spout_videobusidx = json["spout_videobusidx"].asInt();
+			if (spout_videobusidx>=0) {
+				m_cunimixer->SetSPOUT2_Preview_BUS(spout_videobusidx);
+			}
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SET_DISPLAY_BUS) {
+			int display_videobusidx = json["display_videobusidx"].asInt();
+			if (display_videobusidx>=0) {
+				m_cunimixer->SetDisplay_BUS(display_videobusidx);
 			}
 		}
 

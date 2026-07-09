@@ -367,6 +367,8 @@ public:
 	VkDescriptorPool imguiPool;
 
 	int webrtc_bus_preview = 0;
+	int spout2_bus_preview = 0;
+	int display_bus_preview = 0;
 
     projectm_handle _projectM{nullptr};
     projectm_playlist_handle _playlist{nullptr};

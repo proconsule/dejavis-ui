@@ -243,7 +243,6 @@ struct VulkanContext {
     VkSampler defaultSampler = VK_NULL_HANDLE;
     VkSampler cubicSampler = VK_NULL_HANDLE;
 
-
     //Mixer
     VkDescriptorSetLayout m_mixerDescriptorLayout;
 
@@ -307,6 +306,10 @@ struct VulkanTexture {
     VkImageLayout currentLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
     uint32_t width = 0;
     uint32_t height = 0;
+    /* If used for offscren renderpass */
+    VkFramebuffer framebuffer{VK_NULL_HANDLE};
+    VkRenderPass renderPass{VK_NULL_HANDLE};
+
 };
 
 struct MasterResources {

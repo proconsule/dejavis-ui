@@ -53,7 +53,8 @@ export function ShaderDashboard() {
     const handleTest = () => {
         try {
             const b64 = btoa(code);
-            sendMessage({ msgid: 62, source_b64: b64 });
+            //setCompiledCode(code);
+            sendMessage({ msgid: 20002, source_b64: b64 });
         } catch (e) {
             setError("Errore codifica Base64 per test");
         }
@@ -62,7 +63,7 @@ export function ShaderDashboard() {
     const handleDeploy = () => {
         try {
             const b64 = btoa(code);
-            sendMessage({ msgid: 60, source_b64: b64 });
+            sendMessage({ msgid: 20003, source_b64: b64 });
         } catch (e) {
             setError("Errore codifica Base64 per deploy");
         }
@@ -96,12 +97,13 @@ export function ShaderDashboard() {
         }
 
         // 2. Risultato del Test di compilazione (62)
-        if (lastJsonMessage.msgid === 62) {
+        if (lastJsonMessage.msgid === 20002) {
             if (lastJsonMessage.success) {
                 setCanSave(true); // Compilazione OK: sblocca il tasto SAVE
                 const decodedCode = atob(lastJsonMessage.source_b64);
                 setCompiledCode(decodedCode); // Aggiorna la preview WebGL
                 setError(null);
+                console.log(lastJsonMessage);
             } else {
                 setCanSave(false);
                 setError(lastJsonMessage.errormsg || "Errore di compilazione generico");

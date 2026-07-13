@@ -119,6 +119,8 @@ if(glfw3_FOUND)
     message(STATUS "GLFW3 ${glfw3_VERSION} | lib: ${GLFW_LIB}")
 endif()
 
+find_package(glm REQUIRED)
+
 pkg_check_modules(EGL egl)
 
 # --- FFmpeg (via pkg-config) ---
@@ -312,6 +314,7 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/video/yuv2rgb/converters/YUV420PConverter.cpp
         backend/src/video/yuv2rgb/converters/NV12Converter.cpp
         backend/src/video/yuv2rgb/converters/P010Converter.cpp
+        backend/src/video/shadertoy_layer.cpp
         backend/src/unimixer.cpp
         backend/src/audio/audioeffects/audioeffects.cpp
         backend/src/audio/audioeffects/EffectBank.cpp

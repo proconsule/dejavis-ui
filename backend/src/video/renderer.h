@@ -69,7 +69,7 @@
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
-
+#include "shadertoy_layer.h"
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -156,6 +156,12 @@ struct PendingVideoUrlUnLoad {
 	int mixerid = 0;
 };
 
+
+struct PendingShaderLoad {
+	std::atomic<bool> shouldLoad{false};
+	std::string fragshader;
+};
+
 using clock_type = std::chrono::steady_clock;
 
 
@@ -181,6 +187,7 @@ public:
 	std::string fileplayers_basepath = "";
 
 	cprojectm_wrapper  * m_projectm_wrapper = nullptr;
+	CShaderToy *m_shadertoy = nullptr;
 
 
 // SDL2 PART
@@ -248,6 +255,10 @@ public:
 
 	bool AddNDIToMixer(int _mixerid);
 
+	bool AddShaderToy(int _video_mixer_id);
+
+	void RemoveShaderToy(int _video_mixer_id);
+
 	void RemoveNDIFromVideoMixerID(int _video_mixer_id);
 
 	void RemoveNDIFromAudioMixerID(int _audio_mixer_id);
@@ -274,6 +285,10 @@ public:
 	PendingNDILoad m_pendingNDI;
 	PendingNDIUnLoad m_pendingNDI_Unload;
 	PendingNDILoad m_pendingNDISource;
+
+	PendingShadertoyLoad m_pendingShadertoyLoad;
+
+	PendingShaderLoad m_pendingShaderToy_Frag;
 
 	std::mutex m_videoMixerMutex;
 

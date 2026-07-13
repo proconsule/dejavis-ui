@@ -224,8 +224,6 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
     if (m_video_stream_idx >= 0) {
         AVStream*      v_stream = m_fmt_ctx->streams[m_video_stream_idx];
         const AVCodec* v_codec  = avcodec_find_decoder(v_stream->codecpar->codec_id);
-
-        // Apre il codec con (device, target). device==nullptr => software.
         auto tryOpen = [&](AVBufferRef* dev, AVPixelFormat target) -> bool {
             m_video_ctx = avcodec_alloc_context3(v_codec);
             if (!m_video_ctx) return false;
@@ -247,7 +245,7 @@ bool CAV_DECODER::LoadFile(const std::string &_path) {
 
         bool opened = false;
 #ifndef _WIN32  //TODO ON WIN32
-        if (hw_device_ctx && v_codec && codec_supports_vulkan(v_codec)) {
+        if (hw_device_ctx && v_codec /*&& codec_supports_vulkan(v_codec)*/) {
             DEJAVISUI_LOG_DEBUG("[DECODER] tentativo decode Vulkan per %s", v_codec->name);
             opened = tryOpen(hw_device_ctx, AV_PIX_FMT_VULKAN);
             if (opened) {

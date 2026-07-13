@@ -467,9 +467,15 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
         m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME);
         if (hasExt(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME)) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME);
+            DEJAVISUI_LOG_INFO("[CORE] Vulkan h264 decode available");
         }
         if (hasExt(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME)) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME);
+            DEJAVISUI_LOG_INFO("[CORE] Vulkan hevc decode available");
+        }
+        if (hasExt(VK_KHR_VIDEO_DECODE_AV1_EXTENSION_NAME)) {
+            m_ctx.devExt.push_back(VK_KHR_VIDEO_DECODE_AV1_EXTENSION_NAME);
+            DEJAVISUI_LOG_INFO("[CORE] Vulkan AV1 decode available");
         }
         DEJAVISUI_LOG_INFO("[CORE] Vulkan video decode available");
     } else {
@@ -487,6 +493,10 @@ bool CRenderer::Init_Core(uint32_t gpuidx, uint32_t _core_w, uint32_t _core_h) {
         if (hasExt(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME)) {
             DEJAVISUI_LOG_DEBUG("[CORE] Vulkan HEVC video encode available");
             m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME);
+        }
+        if (hasExt(VK_KHR_VIDEO_ENCODE_AV1_EXTENSION_NAME)) {
+            DEJAVISUI_LOG_DEBUG("[CORE] Vulkan AV1 video encode available");
+            m_ctx.devExt.push_back(VK_KHR_VIDEO_ENCODE_AV1_EXTENSION_NAME);
         }
         if (hasExt(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME)) {
             m_ctx.devExt.push_back(VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME);
@@ -1376,13 +1386,9 @@ AVBufferRef* CRenderer::CreateFFmpegVulkanHWContext()
     addQF(m_ctx.transferQueueFamily, 1, VK_QUEUE_TRANSFER_BIT,
           (VkVideoCodecOperationFlagBitsKHR)0);
     addQF(m_ctx.decodeQueueFamily,   1, VK_QUEUE_VIDEO_DECODE_BIT_KHR,
-          (VkVideoCodecOperationFlagBitsKHR)(
-              VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR |
-              VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR|VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR));
+          (VkVideoCodecOperationFlagBitsKHR)0);
     addQF(m_ctx.encodeQueueFamily,   1, VK_QUEUE_VIDEO_ENCODE_BIT_KHR,
-          (VkVideoCodecOperationFlagBitsKHR)(
-              VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR |
-              VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR));
+          (VkVideoCodecOperationFlagBitsKHR)0);
     vkCtx->nb_qf = n;
 
     // --- Campi deprecati: la struct e' zero-init, ma 0 e' un indice VALIDO,

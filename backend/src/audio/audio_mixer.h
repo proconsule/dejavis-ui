@@ -116,6 +116,11 @@ struct AudioMixerOutputItem {
 };
 
 
+struct PendingShadertoyLoad {
+    std::atomic<bool> shouldLoad{false};
+    int mixerid = 0;
+};
+
 struct PendingNDILoad {
     std::atomic<bool> shouldLoad{false};
     int mixerid = 0;

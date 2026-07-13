@@ -6,6 +6,7 @@ import { SystemOverview } from "./components/system-overview"
 import { AudioMixerDashboard} from "./components/audiomixer-dashboard.tsx";
 import { ConnectionOverlay } from "./components/connection-overlay"
 import { ProjectMDashboard} from "./components/projectm-dashboard.tsx";
+import { ShaderDashboard } from "./components/shader-dashboard.tsx"
 import { PlayCircle,Blend,BookAudio ,Wallpaper,LayoutDashboard, Terminal, Monitor } from "lucide-react"
 import { 
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, 
@@ -34,7 +35,7 @@ function DashboardLayout() {
 
   const welcomeSent = useRef(false);
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'audio' | 'audiomixer' | 'projectm' | 'video' | 'logs' | 'player' |'videomixer'| 'visualdj'| 'shader' >('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'audio' | 'audiomixer' | 'projectm' | 'shadertoy' | 'video' | 'logs' | 'player' |'videomixer'| 'visualdj'| 'shader' >('dashboard');
 
   const handleStopDevice = (msgid: number) => {
 	  // Se usi websocket:
@@ -132,6 +133,12 @@ function DashboardLayout() {
                       <Wallpaper  /> <span>projectM</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => setActiveTab('shadertoy')} isActive={activeTab === 'shadertoy'} tooltip="shadertoy">
+                      <Wallpaper  /> <span>shadertoy</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+
                     <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => setActiveTab('logs')} isActive={activeTab === 'logs'} tooltip="Logs">
                       <Terminal /> <span>Log Server</span>
@@ -180,6 +187,7 @@ function DashboardLayout() {
                     {activeTab === 'audiomixer' && "Mixer Audio"}
                     {activeTab === 'videomixer' && "Mixer Video"}
                     {activeTab === 'projectm' && "projectM"}
+                    {activeTab === 'shadertoy' && "shadertoy"}
                     {activeTab === 'visualdj' && "Visual DJ"}
                     {activeTab === 'shader' && "Shader Editor"}
                     {activeTab === 'audio' && "Audio Configuration"}
@@ -223,6 +231,11 @@ function DashboardLayout() {
                       milkdbdata={milkdbdata}
 
                   />
+              )}
+
+              {activeTab === 'shadertoy' && (
+                  <ShaderDashboard />
+
               )}
 
 

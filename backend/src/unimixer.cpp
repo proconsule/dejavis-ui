@@ -422,3 +422,22 @@ void cunimixer::SetSPOUT2_Preview_BUS(int _busidx) {
 void cunimixer::SetDisplay_BUS(int _busidx) {
     video_ref->display_bus_preview = _busidx;
 }
+
+
+void cunimixer::AddShderToy(int _videomixeridx) {
+    video_ref->AddShaderToy(_videomixeridx);
+}
+
+bool cunimixer::ShaderToy_TestShader(std::string _fragshader) {
+    if (video_ref->m_shadertoy) {
+        bool success = video_ref->m_shadertoy->TestShader(_fragshader);
+        return success;
+    }
+    return false;
+
+}
+
+void cunimixer::ShaderToy_DeployShader(std::string _fragshader) {
+    video_ref->m_pendingShaderToy_Frag.fragshader = _fragshader;
+    video_ref->m_pendingShaderToy_Frag.shouldLoad = true;
+}

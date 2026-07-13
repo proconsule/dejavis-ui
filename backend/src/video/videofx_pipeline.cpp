@@ -9,6 +9,7 @@
 #include <vector>
 #include <cstring>
 #include <shaderc/shaderc.hpp>
+#include <cstring>
 
 // =========================================================================
 //  Init / Shutdown

@@ -441,6 +441,12 @@ void CRenderer::drawMixerVideoLayer(VkCommandBuffer cmd,
                        finalScaleX, finalScaleY,
                        _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
         }
+    }else if (_mixerprop->type == 6 && m_shadertoy) {
+        VkDescriptorSet ds = m_shadertoy->getOutputDescriptorSet();
+        drawVideoLayer(cmd, ds,
+                   _mixerprop->pos_x, _mixerprop->pos_y,
+                   finalScaleX, finalScaleY,
+                   _mixerprop->alpha, _mixerprop->y_flip,_mixerprop->useBicubic);
     }
 }
 
@@ -489,6 +495,53 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
                 if (auto* pp = p->img_viewver->getPostProcessor()) pp->submit();
                 p->img_viewver->needUpdate = false;
             }
+        }
+    }
+    if (m_shadertoy) {
+        int slotid = m_shadertoy->getSlotID();
+        if (slotid>=1){
+            VulkanUniTexture& tex = videoTextures[slotid];
+
+            // 1. Transizione verso l'output
+            Vulkan_imageBarrier(cmd, tex.VkTexture.image,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                         VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+            // 2. Usa i RenderPass e Framebuffer gestiti internamente da CShaderToy
+            VkRenderPassBeginInfo rtInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+            rtInfo.renderPass = m_shadertoy->getRenderPass();
+            rtInfo.framebuffer = m_shadertoy->getFramebuffer();
+            rtInfo.renderArea.extent = { tex.VkTexture.width, tex.VkTexture.height };
+
+            VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+            rtInfo.clearValueCount = 1;
+            rtInfo.pClearValues = &clearColor;
+
+            vkCmdBeginRenderPass(cmd, &rtInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            // Viewport e Scissor basati sulla texture target
+            VkViewport viewport{ 0.0f, 0.0f, (float)tex.VkTexture.width, (float)tex.VkTexture.height, 0.0f, 1.0f };
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            VkRect2D scissor{ {0, 0}, { tex.VkTexture.width, tex.VkTexture.height } };
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+            FragShadersPushConstants pc;
+            pc.time = (float)dejatimer.get_total_time();
+            pc.iRes = glm::vec3((float)tex.VkTexture.width, (float)tex.VkTexture.height, 1.0f);
+
+            m_shadertoy->Compute(cmd, pc);
+            m_shadertoy->BindAndDraw(cmd);
+
+            vkCmdEndRenderPass(cmd);
+
+            // 3. Ritorno alla modalità lettura per il mixer finale
+            Vulkan_imageBarrier(cmd, tex.VkTexture.image,
+                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         }
     }
 }
@@ -625,6 +678,37 @@ bool CRenderer::AddNDIToMixer(int _audio_mixer_id) {
     return true;
 }
 
+bool CRenderer::AddShaderToy(int _video_mixer_id) {
+
+    if (m_shadertoy)return false;
+
+    videoMixerTextures[_video_mixer_id].inUse = true;
+    videoMixerTextures[_video_mixer_id].layer = 0;
+    videoMixerTextures[_video_mixer_id].y_flip = true;
+    videoMixerTextures[_video_mixer_id].isVisible = true;
+    videoMixerTextures[_video_mixer_id].type = 6;
+    videoMixerTextures[_video_mixer_id].busoutIdx = 0;
+
+    //videoMixerTextures[_video_mixer_id].shadertoy = new CShaderToy();
+    //std::string testfrag = "";
+    //videoMixerTextures[_video_mixer_id].shadertoy->Init(&m_ctx, testfrag,_video_mixer_id,core_w,core_h, &videoTextures[_video_mixer_id].VkTexture);
+    if (!m_shadertoy) {
+        m_shadertoy = new CShaderToy();
+        std::string testfrag = "";
+        m_shadertoy->Init(&m_ctx, testfrag,_video_mixer_id,core_w,core_h, &videoTextures[_video_mixer_id].VkTexture);
+
+    }
+    return true;
+}
+
+void CRenderer::RemoveShaderToy(int _video_mixer_id) {
+    if (m_shadertoy) {
+        m_shadertoy->Cleanup();
+        delete m_shadertoy;
+        m_shadertoy = nullptr;
+    }
+}
+
 void CRenderer::RemoveNDIFromVideoMixerID(int _video_mixer_id) {
     CNDIReceiver* decoderToDelete = nullptr;
     int audiomixerid = videoMixerTextures[_video_mixer_id].audiomixerid;
@@ -715,10 +799,21 @@ bool CRenderer::AddImageToMixer(const unsigned char* img_data,int img_size,bool 
 void CRenderer::RemoveImageFromMixer(int slot) {
     std::lock_guard<std::mutex> lock(m_videoMixerMutex);
     if (slot > 0 && slot < 10) {
-        int originalidx = videoMixerTextures[slot].originalIdx;
-        CleanupTexture(videoTextures[slot].VkTexture);
-        videoMixerTextures[slot] = videomixeritem();
-        videoMixerTextures[slot].originalIdx = originalidx;
+        if (videoMixerTextures[slot].type == 6) {
+            int originalidx = videoMixerTextures[slot].originalIdx;
+            m_shadertoy->Cleanup();
+            delete m_shadertoy;
+            m_shadertoy = nullptr;
+            videoMixerTextures[slot] = videomixeritem();
+            videoMixerTextures[slot].originalIdx = originalidx;
+        }
+        if (videoMixerTextures[slot].type == 1) {
+            int originalidx = videoMixerTextures[slot].originalIdx;
+            CleanupTexture(videoTextures[slot].VkTexture);
+            videoMixerTextures[slot] = videomixeritem();
+            videoMixerTextures[slot].originalIdx = originalidx;
+        }
+
 
     }
 }
@@ -880,6 +975,11 @@ void CRenderer::VideoMixer_SyncInputs() {
 
     }
 
+    if (m_pendingShadertoyLoad.shouldLoad.load()) {
+        m_pendingShadertoyLoad.shouldLoad.store(false);
+        AddShaderToy(m_pendingShadertoyLoad.mixerid);
+    }
+
     /*
      *  DELEGATO A UNIMXIER via handleenevts
     if (m_pendingInputLoad.shouldLoad.load()) {
@@ -906,6 +1006,16 @@ void CRenderer::VideoMixer_SyncInputs() {
         DEJAVISUI_LOG_DEBUG("OPENING URL:%s",m_pendingVideoUrlload.url.c_str());
         AddVideoURLPlayerToMixer(m_pendingVideoUrlload.url,m_pendingVideoUrlload.mixerid);
     }
+
+    if (m_pendingShaderToy_Frag.shouldLoad.load()) {
+        m_pendingShaderToy_Frag.shouldLoad.store(false);
+        if (m_shadertoy) {
+            m_shadertoy->UpdateShader(m_pendingShaderToy_Frag.fragshader);
+        }
+    }
+
+
+
 }
 
 

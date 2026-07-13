@@ -121,6 +121,12 @@ public:
     void AddInputAudioFX(int _idx, audio_utils::EffectBank::EffectType _effecttype);
     void RemoveInputAudioFX(int _idx,int _fxpos);
 
+    void AddShderToy(int _videomixeridx);
+
+    void ShaderToy_DeployShader(std::string _fragshader);
+
+    bool ShaderToy_TestShader(std::string _fragshader);
+
     void ReconfigureInputFX(int _idx,int _fxpos,audio_utils::EffectBank::SlotConfig mycfg);
 
     void SetWebRTC_Preview_BUS(int _busidx);

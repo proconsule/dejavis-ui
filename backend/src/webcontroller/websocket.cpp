@@ -812,6 +812,31 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			}
 		}
 
+		if (getMsgId(json) == DEJAVISUI_MSGID::LOAD_SHADERTOY_LAYER) {
+			int video_mixer_idx = json["video_mixer_idx"].asInt();
+			m_cunimixer->AddShderToy(video_mixer_idx);
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_TEST_SHADER) {
+			std::string b64_shader = json["source_b64"].asString();
+			std::string decodedContent = drogon::utils::base64Decode(b64_shader);
+			bool success = m_cunimixer->ShaderToy_TestShader(decodedContent);
+			if (success) {
+				Json::Value root;
+				root["msgid"] = (int)DEJAVISUI_MSGID::SHADERTOY_TEST_SHADER;
+				root["success"] = true;
+				root["source_b64"] = b64_shader;
+				wsConnPtr->sendJson(root);
+			}
+
+		}
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_DEPLOY_SHADER) {
+			std::string b64_shader = json["source_b64"].asString();
+			std::string decodedContent = drogon::utils::base64Decode(b64_shader);
+			m_cunimixer->ShaderToy_DeployShader(decodedContent);
+
+		}
+
 
 	}
     DEJAVISUI_LOG_DEBUG("new websocket message: %s",message.c_str());

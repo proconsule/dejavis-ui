@@ -211,10 +211,14 @@ type ContextMenuProps = {
     onRemove: (idx: number) => void;
     onSelectNDISource: (idx: number, sourceName: string) => void; // Callback per la selezione
     onNDIRemove: (idx: number) => void;
+    sendMessage: (msg: string) => void;
 };
 
 function ContextMenu({ state, input, onClose, onAddVideo, onRemove, onSelectNDISource,onNDIRemove }: ContextMenuProps) {
     const ref = useRef<HTMLDivElement | null>(null);
+
+    const { sendMessage } = useWS();
+
 
     useEffect(() => {
         if (!state.visible) return;
@@ -290,6 +294,17 @@ function ContextMenu({ state, input, onClose, onAddVideo, onRemove, onSelectNDIS
                                     buttonLabel="Load Image"
                                     onUploadComplete={() => onClose()}
                                 />
+                            </div>
+                            <div className="px-3 py-1">
+                                <button
+                                    onClick={() => {
+                                        sendMessage({ msgid: 20000, video_mixer_idx: state.inputIndex });
+                                        onClose();
+                                    }}
+                                    className="w-full text-left px-2 py-2 hover:bg-emerald-500/10 flex items-center gap-2 text-emerald-400 transition-colors text-[10px] font-bold uppercase tracking-tight"
+                                >
+                                    <Play size={12} /> Trigger Action
+                                </button>
                             </div>
                         </div>
                     )}
@@ -698,6 +713,7 @@ export function VideoMixerDashboard() {
                 onRemove={removeInput}
                 onSelectNDISource={handleSelectNDISource}
                 onNDIRemove={handleNDIRemove}
+                sendMessage={sendMessage}
             />
 
             {/* --- HEADER --- */}

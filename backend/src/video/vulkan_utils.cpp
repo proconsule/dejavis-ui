@@ -1,5 +1,8 @@
 #include "vulkan_utils.h"
 
+#include <shaderc/shaderc.hpp>
+#include <cstring>
+
 void TransitionImageLayout(VkCommandBuffer cmd,
                            VulkanTexture&  tex,
                            VkImageLayout   newLayout)
@@ -197,5 +200,88 @@ VkResult VulkanQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitIn
 
     return result;
 }
+
+void Vulkan_CreateBuffer(VulkanContext *_ctx, VkDeviceSize size, VkBufferUsageFlags usage,
+                         VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(_ctx->device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        throw std::runtime_error("Fallita la creazione del buffer!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(_ctx->device, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = FindMemoryType(_ctx, memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(_ctx->device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("Fallita l'allocazione della memoria del buffer!");
+    }
+
+    vkBindBufferMemory(_ctx->device, buffer, bufferMemory, 0);
+}
+
+
+std::vector<uint32_t> Vulkan_GLSL2SPIRV(const char* source, shaderc_shader_kind kind, const char* name) {
+    shaderc::Compiler compiler;
+    shaderc::CompileOptions options;
+
+    options.SetOptimizationLevel(shaderc_optimization_level_performance);
+
+    shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(
+        source, strlen(source), kind, name, options);
+
+    if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+        std::cerr << "Shader compilation failed: " << result.GetErrorMessage() << std::endl;
+        return {};
+    }
+
+    return {result.cbegin(), result.cend()};
+}
+
+
+VkShaderModule Vulkan_CreateShader(VkDevice device,std::vector<uint32_t> spirv){
+
+    VkShaderModuleCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = spirv.size() * sizeof(uint32_t);
+    createInfo.pCode = spirv.data();
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        printf("Failed to create VkShaderModule\n");
+        return VK_NULL_HANDLE;
+    }
+
+    return shaderModule;
+
+}
+
+void Vulkan_imageBarrier(VkCommandBuffer cmd, VkImage img,
+                  VkImageLayout oldLayout, VkImageLayout newLayout,
+                  VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                  VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {
+    VkImageMemoryBarrier b{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    b.oldLayout           = oldLayout;
+    b.newLayout           = newLayout;
+    b.srcAccessMask       = srcAccess;
+    b.dstAccessMask       = dstAccess;
+    b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.image               = img;
+    b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+}
+
+
+
 
 

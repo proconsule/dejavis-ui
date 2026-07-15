@@ -54,6 +54,7 @@
 #include "../vulkan_logger.h"
 
 #include <projectM-4/projectM.h>
+#include <projectM-4/core.h>
 #include <projectM-4/playlist.h>
 
 #include "vulkan_utils.h"

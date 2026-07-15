@@ -837,6 +837,12 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 
 		}
 
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_ASSIGN_ICHANNEL) {
+			int mixervideosrc_idx = json["mixervideosrc_idx"].asInt();
+			int ichannel = json["ichannel"].asInt();
+
+		}
+
 
 	}
     DEJAVISUI_LOG_DEBUG("new websocket message: %s",message.c_str());

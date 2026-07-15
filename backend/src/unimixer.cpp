@@ -438,6 +438,12 @@ bool cunimixer::ShaderToy_TestShader(std::string _fragshader) {
 }
 
 void cunimixer::ShaderToy_DeployShader(std::string _fragshader) {
-    video_ref->m_pendingShaderToy_Frag.fragshader = _fragshader;
-    video_ref->m_pendingShaderToy_Frag.shouldLoad = true;
+    if (video_ref->m_shadertoy) {
+        std::string fullGLSL = video_ref->m_shadertoy->ShaderToy_Comapt_Shader(_fragshader);
+        video_ref->m_shadertoy->current_frag_shader = _fragshader;
+        auto newFragSpirv = Vulkan_GLSL2SPIRV(fullGLSL.c_str(), shaderc_fragment_shader, "main_frag");
+
+        video_ref->m_pendingShaderToy_Frag.spirvcode = newFragSpirv;
+        video_ref->m_pendingShaderToy_Frag.shouldLoad = true;
+    }
 }

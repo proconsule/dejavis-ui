@@ -26,6 +26,9 @@ struct TextureBinding {
 class CShaderToy {
 public:
     CShaderToy();
+
+    std::string ShaderToy_Comapt_Shader(std::string shader_code);
+
     static constexpr uint32_t FFT_SIZE = 512;
 
     void CreateRenderPass();
@@ -41,7 +44,7 @@ public:
 
     void Compute(VkCommandBuffer cmd, const FragShadersPushConstants& pc) ;
 
-    bool UpdateShader(const std::string& fragSource);
+    bool UpdateShader(std::vector<uint32_t> _spirvcode);
 
     bool TestShader(std::string _frag_shader);
 
@@ -83,8 +86,13 @@ public:
         return m_outputDescriptorSet;
     }
 
+    void SetiChannelTexture(VulkanUniTexture *_texture,int chanidx);
+
 private:
     VulkanContext* m_ctx;
+
+    std::vector<TextureBinding> m_channels{ 4 };
+
 
     VkBuffer         m_uboBuffer;
     VkDeviceMemory   m_uboMemory;
@@ -122,7 +130,7 @@ private:
     FragShadersPushConstants currentpc;
     FragShadersPushConstants prev_currentpc;
 
-    void SetupGraphicsPipeline(const char* vert, const char* frag);
+    void SetupGraphicsPipeline(std::vector<uint32_t> _spirv_vertx , std::vector<uint32_t> _spirv_frag);
     void SetupSkyPipeline();
 
     VulkanTexture m_skyHDR;
@@ -167,6 +175,9 @@ private:
     VkShaderModule loadShader(const char *glslSource, const char *name);
 
     VkShaderModule CreateShaderModule(const uint32_t *code, size_t sizeInBytes);
+
+    std::vector<uint32_t> spirv_vertex_constant;
+
 };
 
 #endif //DEJAVIS_UI_SHADERTOY_LAYER_H

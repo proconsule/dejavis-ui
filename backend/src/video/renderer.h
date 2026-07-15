@@ -159,7 +159,8 @@ struct PendingVideoUrlUnLoad {
 
 struct PendingShaderLoad {
 	std::atomic<bool> shouldLoad{false};
-	std::string fragshader;
+	std::vector<uint32_t > spirvcode;
+	//std::string fragshader;
 };
 
 using clock_type = std::chrono::steady_clock;

@@ -24,6 +24,11 @@ layout(std140, binding = 0) uniform ShadertoyUniforms {
     vec4  bassmidtreble;          // Padding finale per chiudere il blocco a 80 byte
 };
 
+layout(binding = 1) uniform sampler2D iChannel0;
+layout(binding = 2) uniform sampler2D iChannel1;
+layout(binding = 3) uniform sampler2D iChannel2;
+layout(binding = 4) uniform sampler2D iChannel3;
+
 
 // Output obbligatorio per il fragment shader in Vulkan
 layout(location = 0) out vec4 outColor;
@@ -40,21 +45,15 @@ static const char* SHADERTOY_SUFFIX = R"(
 layout(location = 0) in vec2 outUV;
 
 void main() {
-    // Usiamo gl_FragCoord per la massima precisione dei pixel (linee nitide)
-    // Ma dobbiamo invertire la Y perché Vulkan è Y-down e Shadertoy è Y-up.
-    // Usiamo iResolution.y che arriva dall'UBO.
+
     vec2 fragCoord = vec4(gl_FragCoord.x, gl_FragCoord.y, 0.0, 0.0).xy;
 
-    vec4 fragColor = vec4(0.0);
+    vec4 fragColor = vec4(0.0, 0.0, 0.0, 1.0);
 
     // Eseguiamo lo shader
     mainImage(fragColor, fragCoord);
 
-    // 1. Gamma correction: essenziale per eliminare l'effetto "piatto" e sgranato
-    // 2. Clamp: evita che valori HDR rompano il colore finale
-    vec3 gammaCorrected = pow(clamp(fragColor.rgb, 0.0, 1.0), vec3(1.0/2.2));
-
-    outColor = vec4(gammaCorrected, fragColor.a);
+    outColor = vec4(clamp(fragColor.rgb, 0.0, 1.0), 1.0);
 }
 )";
 
@@ -80,11 +79,8 @@ layout(std140, binding = 0) uniform ShadertoyUniforms {
     vec4  bassmidtreble;          // Padding finale per chiudere il blocco a 80 byte
 };
 
-// Binding 1: Il tuo CD Audio (Mappato dalla tua classe FrameAudioData)
-// Riga 0: FFT, Riga 1: Waveform
-layout(binding = 1) uniform sampler2D iChannel0;
 
-// Binding 2-4: Slot per altre texture o buffer
+layout(binding = 1) uniform sampler2D iChannel0;
 layout(binding = 2) uniform sampler2D iChannel1;
 layout(binding = 3) uniform sampler2D iChannel2;
 layout(binding = 4) uniform sampler2D iChannel3;
@@ -737,7 +733,7 @@ void main() {
 
 CShaderToy::CShaderToy() {}
 
-std::string ShaderToy_Comapt_Shader(std::string shader_code){
+std::string CShaderToy::ShaderToy_Comapt_Shader(std::string shader_code){
     std::string fullGLSL = "";
     fullGLSL += SHADERTOY_PREFIX;
     fullGLSL += "\n// --- USER CODE START ---\n";
@@ -771,15 +767,23 @@ void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid
 
     CreateDescriptorPool();
 
-    VkDescriptorSetLayoutBinding bindings[1] = {};
+    VkDescriptorSetLayoutBinding bindings[5] = {};
     bindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    for(int i = 1; i <= 4; i++) {
+        bindings[i] = { (uint32_t)i, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr };
+    }
+
     VkDescriptorSetLayoutCreateInfo dsLayoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-    dsLayoutInfo.bindingCount = 1;
+    dsLayoutInfo.bindingCount = 5; // Ora sono 5
     dsLayoutInfo.pBindings = bindings;
     vkCreateDescriptorSetLayout(m_ctx->device, &dsLayoutInfo, nullptr, &m_descriptorLayout);
 
 
-    SetupGraphicsPipeline(SHADERTOY_VSHADER, fullGLSL.c_str());
+    spirv_vertex_constant = Vulkan_GLSL2SPIRV(SHADERTOY_VSHADER, shaderc_vertex_shader, "main_vert");
+    auto fragSpirv = Vulkan_GLSL2SPIRV(fullGLSL.c_str(), shaderc_fragment_shader, "main_frag");
+
+
+    SetupGraphicsPipeline(spirv_vertex_constant, fragSpirv);
 
     VkDescriptorSetLayoutBinding outBinding = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     VkDescriptorSetLayoutCreateInfo outLayoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
@@ -816,6 +820,7 @@ void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid
 
 }
 
+/*
 
 void CShaderToy::SetupGraphicsPipeline(const char* vertSource, const char* fragSource) {
     // --- 1. COMPILAZIONE ---
@@ -834,17 +839,7 @@ void CShaderToy::SetupGraphicsPipeline(const char* vertSource, const char* fragS
 
     DEJAVISUI_LOG_DEBUG("[SHADERTOY] SHADER COMPILED");
 
-/*
-    // --- 2. DESCRIPTOR SET LAYOUT ---
-    VkDescriptorSetLayoutBinding bindings[1] = {};
-    // Binding 0: UBO (Dati sistema)
-    bindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
 
-    VkDescriptorSetLayoutCreateInfo dsLayoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-    dsLayoutInfo.bindingCount = 1; //
-    dsLayoutInfo.pBindings = bindings;
-    vkCreateDescriptorSetLayout(m_ctx->device, &dsLayoutInfo, nullptr, &m_descriptorLayout);
-*/
     // --- 3. PIPELINE LAYOUT ---
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -921,6 +916,103 @@ void CShaderToy::SetupGraphicsPipeline(const char* vertSource, const char* fragS
     vkDestroyShaderModule(m_ctx->device, vertModule, nullptr);
 }
 
+*/
+
+void CShaderToy::SetupGraphicsPipeline(std::vector<uint32_t> _spirv_vertx , std::vector<uint32_t> _spirv_frag) {
+    // --- 1. COMPILAZIONE ---
+    //auto vertSpirv = Vulkan_GLSL2SPIRV(vertSource, shaderc_vertex_shader, "main_vert");
+    //auto fragSpirv = Vulkan_GLSL2SPIRV(fragSource, shaderc_fragment_shader, "main_frag");
+
+    DEJAVISUI_LOG_DEBUG("[SHADERTOY] SETUP GRAPH PIPELINE");
+
+
+    if (_spirv_vertx.empty() || _spirv_frag.empty()) {
+        return;
+    }
+    VkShaderModule vertModule = Vulkan_CreateShader(m_ctx->device, _spirv_vertx);
+    VkShaderModule fragModule = Vulkan_CreateShader(m_ctx->device, _spirv_frag);
+
+
+    DEJAVISUI_LOG_DEBUG("[SHADERTOY] SHADER COMPILED");
+
+
+    // --- 3. PIPELINE LAYOUT ---
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &m_descriptorLayout;
+    vkCreatePipelineLayout(m_ctx->device, &pipelineLayoutInfo, nullptr, &m_graphicsPipelineLayout);
+
+
+    DEJAVISUI_LOG_DEBUG("[SHADERTOY] PIPELINE LAYOUT");
+
+    // --- 4. CONFIGURAZIONE PIPELINE ---
+    VkPipelineShaderStageCreateInfo shaderStages[2] = {};
+    shaderStages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vertModule, "main", nullptr };
+    shaderStages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragModule, "main", nullptr };
+
+    // Stato Vertex Input (Vuoto per il full screen triangle)
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    // Viewport e Scissor Dinamici (per gestire resize finestra)
+    VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampling = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState colorBlend = {};
+    colorBlend.colorWriteMask = 0xF; // RGBA
+    colorBlend.blendEnable = VK_FALSE;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlend;
+
+    VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynStates;
+
+
+
+    // --- 5. CREAZIONE FINALE ---
+    VkGraphicsPipelineCreateInfo pipelineInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = m_graphicsPipelineLayout;
+    pipelineInfo.renderPass = outTexture->renderPass;
+    pipelineInfo.subpass = 0;
+
+    VkResult res = vkCreateGraphicsPipelines(m_ctx->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline);
+    if (res != VK_SUCCESS) {
+        DEJAVISUI_LOG_ERROR("Pipeline creation failed with result: %d", res);
+    }
+
+
+    DEJAVISUI_LOG_DEBUG("[SHADERTOY] PIPELINE OK");
+
+    // Cleanup moduli
+    vkDestroyShaderModule(m_ctx->device, fragModule, nullptr);
+    vkDestroyShaderModule(m_ctx->device, vertModule, nullptr);
+}
+
+
 void CShaderToy::Compute(VkCommandBuffer cmd, const FragShadersPushConstants &pc) {
     currentpc = pc;
     UpdateUBO();
@@ -928,22 +1020,20 @@ void CShaderToy::Compute(VkCommandBuffer cmd, const FragShadersPushConstants &pc
 
 void CShaderToy::BindAndDraw(VkCommandBuffer cmd) {
 
-    if (m_hasPendingShader) {
-        printf("Changing SHADER AAAAAAAAAAAAAAAA\r\n");
-        std::string sourceToCompile;
-        {
-            std::lock_guard<std::mutex> lock(m_shaderMutex);
-            sourceToCompile = m_pendingShaderSource;
-            m_hasPendingShader = false;
-        }
+    if (m_graphicsPipeline == VK_NULL_HANDLE) return;
 
-        // Ora siamo nel thread corretto! Possiamo validare e aggiornare.
-        if (!this->UpdateShader(sourceToCompile)) {
-
+    for (const auto& binding : m_channels) {
+        if (binding.texture.image != VK_NULL_HANDLE) {
+            imageBarrier(cmd,
+                         binding.texture.image,
+                         VK_IMAGE_LAYOUT_GENERAL, // O il layout corrente della texture
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_ACCESS_SHADER_WRITE_BIT,
+                         VK_ACCESS_SHADER_READ_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         }
     }
-
-    if (m_graphicsPipeline == VK_NULL_HANDLE) return;
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
@@ -966,6 +1056,10 @@ void CShaderToy::BindAndDraw(VkCommandBuffer cmd) {
     scissor.extent = extent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
+    if (m_descriptorSet == VK_NULL_HANDLE) {
+        DEJAVISUI_LOG_ERROR("[SHADERTOY] Attempted to bind NULL descriptor set!");
+        return;
+    }
     // 6. Bind Descriptor Sets
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             m_graphicsPipelineLayout, 0, 1, &m_descriptorSet, 0, nullptr);
@@ -1029,8 +1123,6 @@ void CShaderToy::UpdateDescriptorSet(
     uboWrite.pBufferInfo     = &bufferInfo;
     descriptorWrites.push_back(uboWrite);
 
-    // 2. Binding 1, 2, 3...: Texture con Sampler specifici (iChannels)
-    // Usiamo un vettore di info pre-allocato per mantenere validi i puntatori
     std::vector<VkDescriptorImageInfo> imageInfos(bindings.size());
 
     for (size_t i = 0; i < bindings.size(); i++) {
@@ -1053,7 +1145,10 @@ void CShaderToy::UpdateDescriptorSet(
 }
 
 void CShaderToy::AllocateAndUpdateInputDescriptorSet() {
-    if (m_descriptorLayout == VK_NULL_HANDLE) return;
+    if (m_descriptorLayout == VK_NULL_HANDLE) {
+        DEJAVISUI_LOG_ERROR("[SHADERTOY] Descriptor Layout is NULL!");
+        return;
+    }
 
     VkDescriptorSetAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
     allocInfo.descriptorPool = m_descriptorPool;
@@ -1064,6 +1159,9 @@ void CShaderToy::AllocateAndUpdateInputDescriptorSet() {
         DEJAVISUI_LOG_ERROR("[SHADERTOY] Failed to allocate descriptor set");
         return;
     }
+
+    DEJAVISUI_LOG_DEBUG("[SHADERTOY] Descriptor Set successfully allocated: %p", m_descriptorSet);
+
 
     std::vector<TextureBinding> emptyTextures;
     UpdateDescriptorSet(m_descriptorSet, m_uboBuffer, emptyTextures);
@@ -1105,6 +1203,34 @@ bool CShaderToy::TestShader(std::string _frag_shader) {
 }
 
 
+bool CShaderToy::UpdateShader(std::vector<uint32_t> _spirvcode){
+
+    //std::string fullGLSL = ShaderToy_Comapt_Shader(fragSource);
+    //current_frag_shader = fragSource;
+    //auto newFragSpirv = Vulkan_GLSL2SPIRV(fullGLSL.c_str(), shaderc_fragment_shader, "main_frag");
+
+    if (_spirvcode.empty()) {
+        return false;
+    }
+
+    vkDeviceWaitIdle(m_ctx->device);
+
+    if (m_graphicsPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(m_ctx->device, m_graphicsPipeline, nullptr);
+        m_graphicsPipeline = VK_NULL_HANDLE;
+    }
+    if (m_graphicsPipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(m_ctx->device, m_graphicsPipelineLayout, nullptr);
+        m_graphicsPipelineLayout = VK_NULL_HANDLE;
+    }
+
+    SetupGraphicsPipeline(spirv_vertex_constant, _spirvcode);
+
+    return true;
+}
+
+
+/*
 bool CShaderToy::UpdateShader(const std::string& fragSource) {
 
     std::string fullGLSL = ShaderToy_Comapt_Shader(fragSource);
@@ -1130,6 +1256,7 @@ bool CShaderToy::UpdateShader(const std::string& fragSource) {
 
     return true;
 }
+*/
 
 void CShaderToy::Cleanup() {
     if (m_ctx && m_ctx->device != VK_NULL_HANDLE) {
@@ -1167,15 +1294,13 @@ void CShaderToy::CreateDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = 1;
 
-    // 2. Per le Texture (iChannel0, etc.)
-    // Ne mettiamo 4 per sicurezza, anche se ora ne usi 1
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 4;
+    poolSizes[1].descriptorCount = 10;
 
     VkDescriptorPoolCreateInfo poolInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
     poolInfo.poolSizeCount = 2;
     poolInfo.pPoolSizes = poolSizes;
-    poolInfo.maxSets = 2;
+    poolInfo.maxSets = 10;
 
     if (vkCreateDescriptorPool(m_ctx->device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
         printf("Errore critico: Impossibile creare Descriptor Pool per FragShader\n");
@@ -1201,7 +1326,6 @@ void CShaderToy::imageBarrier(VkCommandBuffer cmd, VkImage img,
 bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h) {
     if (!out) return false;
 
-    // Evitiamo dimensioni zero che causerebbero crash immediati
     if (w == 0 || h == 0) {
         w = 1280; h = 720;
     }
@@ -1213,7 +1337,7 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
 #ifdef _WIN32
     externalInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #endif
-    // 1. Creazione Immagine Master (R8G8B8A8_UNORM)
+
     VkImageCreateInfo imageInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
     imageInfo.imageType     = VK_IMAGE_TYPE_2D;
     imageInfo.format        = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1233,7 +1357,6 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
 
     if (vkCreateImage(m_ctx->device, &imageInfo, nullptr, &out->image) != VK_SUCCESS) return false;
 
-    // Allocazione Memoria
     VkMemoryRequirements memReqs;
     vkGetImageMemoryRequirements(m_ctx->device, out->image, &memReqs);
 
@@ -1260,7 +1383,6 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
     if (vkAllocateMemory(m_ctx->device, &allocInfo, nullptr, &out->memory) != VK_SUCCESS) return false;
     vkBindImageMemory(m_ctx->device, out->image, out->memory, 0);
 
-    // 2. Render Pass Offscreen
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format         = VK_FORMAT_R8G8B8A8_UNORM;
     colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
@@ -1302,7 +1424,6 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
 
     if (vkCreateRenderPass(m_ctx->device, &rpInfo, nullptr, &out->renderPass) != VK_SUCCESS) return false;
 
-    // 3. View e Framebuffer
     VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
     viewInfo.image            = out->image;
     viewInfo.viewType         = VK_IMAGE_VIEW_TYPE_2D;
@@ -1324,6 +1445,22 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
     DEJAVISUI_LOG_DEBUG("[VULKAN] SHaderToy Image create: %dx%d (RP: %p, IMG: %p)",
                         w, h, (void*)out->renderPass, (void*)out->image);
     return true;
+}
+
+
+void CShaderToy::SetiChannelTexture(VulkanUniTexture * _texture, int chanidx) {
+    if (chanidx < 0 || chanidx >= 4) return;
+    if (!_texture) return;
+
+    m_channels[chanidx].texture.view = _texture->VkTexture.view;
+    m_channels[chanidx].texture.image = _texture->VkTexture.image;
+    m_channels[chanidx].sampler = m_ctx->defaultSampler;
+
+    if (m_descriptorSet != VK_NULL_HANDLE) {
+        UpdateDescriptorSet(m_descriptorSet, m_uboBuffer, m_channels);
+    }
+
+    DEJAVISUI_LOG_DEBUG("[SHADERTOY] Channel %d set to texture %p", chanidx, _texture);
 }
 
 void CShaderToy::DestroyImageResources(MasterResources* out) {

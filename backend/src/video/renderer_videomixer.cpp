@@ -1010,7 +1010,7 @@ void CRenderer::VideoMixer_SyncInputs() {
     if (m_pendingShaderToy_Frag.shouldLoad.load()) {
         m_pendingShaderToy_Frag.shouldLoad.store(false);
         if (m_shadertoy) {
-            m_shadertoy->UpdateShader(m_pendingShaderToy_Frag.fragshader);
+            m_shadertoy->UpdateShader(m_pendingShaderToy_Frag.spirvcode);
         }
     }
 

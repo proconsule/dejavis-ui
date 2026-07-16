@@ -16,6 +16,8 @@ export function ShaderView({ compiledCode, onError, onStats }: ShaderViewProps) 
     const lastTimeRef = useRef(0);
     const lastFpsUpdateRef = useRef(0);
     const framesSinceLastUpdate = useRef(0);
+    const lastFrameTimestampRef = useRef(0);
+
 
     useEffect(() => {
         const canvas = canvasRef.current!;
@@ -37,8 +39,31 @@ export function ShaderView({ compiledCode, onError, onStats }: ShaderViewProps) 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
 
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255  , 255]));
+
+        const image = new Image();
+        image.src = 'dejavisui-logo.png'; // Sostituisci con il path della tua immagine
+        image.onload = () => {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            gl.generateMipmap(gl.TEXTURE_2D);
+        };
+
         const render = (time: number) => {
             if (!programRef.current) return;
+
+            const targetFPS = 60;
+            const frameDuration = 1000 / targetFPS;
+            const elapsed = time - lastFrameTimestampRef.current;
+
+            if (elapsed < frameDuration) {
+                requestRef.current = requestAnimationFrame(render);
+                return;
+            }
+            lastFrameTimestampRef.current = time - (elapsed % frameDuration);// -----------------------------
+
 
             const currentTime = time * 0.001;
             const deltaTime = currentTime - lastTimeRef.current;
@@ -61,6 +86,11 @@ export function ShaderView({ compiledCode, onError, onStats }: ShaderViewProps) 
             gl.uniform1f(gl.getUniformLocation(programRef.current, "iTimeDelta"), deltaTime);
             gl.uniform1i(gl.getUniformLocation(programRef.current, "iFrame"), frameCountRef.current);
             gl.uniform1f(gl.getUniformLocation(programRef.current, "iSampleRate"), 44100.0);
+
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.uniform1i(gl.getUniformLocation(programRef.current, "iChannel0"), 0);
 
             //const audioLoc = gl.getUniformLocation(programRef.current, "bassmidtreble");
 

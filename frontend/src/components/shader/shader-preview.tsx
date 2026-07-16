@@ -30,6 +30,20 @@ export function ShaderPreview({ compiledCode, onError }: ShaderPreviewProps) {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
 
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        // Mettiamo un pixel nero temporaneo finché l'immagine non carica
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+
+
+        const image = new Image();
+        image.src = 'dejavisui-logo.png'; // Sostituisci con il path della tua immagine
+        image.onload = () => {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            gl.generateMipmap(gl.TEXTURE_2D);
+        };
+
         const render = (time: number) => {
             if (!programRef.current || !canvas) return;
 
@@ -40,6 +54,10 @@ export function ShaderPreview({ compiledCode, onError }: ShaderPreviewProps) {
 
             gl.uniform3f(gl.getUniformLocation(programRef.current, "iResolution"), canvas.width, canvas.height, 1);
             gl.uniform1f(gl.getUniformLocation(programRef.current, "iTime"), time * 0.001);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.uniform1i(gl.getUniformLocation(programRef.current, "iChannel0"), 0);
 
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             requestRef.current = requestAnimationFrame(render);

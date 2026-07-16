@@ -12,6 +12,8 @@ uniform vec4  iMouse;
 uniform vec4  iDate;
 uniform float iSampleRate;
 uniform vec4  bassmidtreble; // x: bass, y: mid, z: treble, w: global
+uniform sampler2D iChannel0;
+
 
 // Dati audio extra (i 512 campioni)
 uniform float iWaveform[512];
@@ -39,7 +41,6 @@ export function createShaderProgram(gl: WebGL2RenderingContext, fragmentSource: 
         if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
             const log = gl.getShaderInfoLog(s);
             gl.deleteShader(s);
-            // Risoluzione TS2769: usiamo l'operatore ?? per garantire string | undefined
             throw new Error(log ?? "Errore di compilazione shader sconosciuto");
         }
         return s;

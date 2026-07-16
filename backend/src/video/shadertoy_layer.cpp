@@ -743,13 +743,15 @@ std::string CShaderToy::ShaderToy_Comapt_Shader(std::string shader_code){
     return fullGLSL;
 }
 
-void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid,int _w ,int _h, VulkanTexture * _targetIamge) {
+void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid,int _w ,int _h, VulkanUniTexture * _targetUniTexture) {
     m_ctx = _ctx;
-    outTexture = _targetIamge;
+    outUniTexture = _targetUniTexture;
     slotid = _slotid;
     current_frag_shader = frag_shader;
     current_frag_shader = SHADERTOY_TEST5_FRAG;
     std::string fullGLSL = ShaderToy_Comapt_Shader(current_frag_shader);
+
+    m_postProcessor = std::make_unique<CPostProcessor>(m_ctx);
 
     // 1. Creazione dell'UBO (Binding 0: iTime, iResolution, etc.)
     // Usiamo una funzione helper Vulkan_CreateBuffer (che dovresti avere nel progetto)
@@ -763,7 +765,7 @@ void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid
         vkMapMemory(m_ctx->device, m_uboMemory, 0, sizeof(ShadertoyUBO), 0, &m_uboMappedPtr);
     }
 
-    CreateImageResources(outTexture,_w,_h);
+    CreateImageResources(outUniTexture,_w,_h);
 
     CreateDescriptorPool();
 
@@ -800,7 +802,7 @@ void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid
     // Update del set di output con la vista della texture appena creata
     VkDescriptorImageInfo outImageInfo = {};
     outImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // Assicurati che il render finale faccia il transition
-    outImageInfo.imageView = outTexture->view;
+    outImageInfo.imageView = outUniTexture->VkTexture.view;
     outImageInfo.sampler = m_ctx->defaultSampler; // O un sampler creato ad hoc
 
     VkWriteDescriptorSet outWrite = { VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
@@ -811,7 +813,8 @@ void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid
     outWrite.pImageInfo = &outImageInfo;
     vkUpdateDescriptorSets(m_ctx->device, 1, &outWrite, 0, nullptr);
 
-
+    outUniTexture->VkTexture.sampler = m_ctx->defaultSampler;
+    m_postProcessor->initRgbaInput(*_targetUniTexture, _targetUniTexture->VkTexture.width, _targetUniTexture->VkTexture.height);
 
     AllocateAndUpdateInputDescriptorSet();
 
@@ -820,108 +823,8 @@ void CShaderToy::Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid
 
 }
 
-/*
-
-void CShaderToy::SetupGraphicsPipeline(const char* vertSource, const char* fragSource) {
-    // --- 1. COMPILAZIONE ---
-    auto vertSpirv = Vulkan_GLSL2SPIRV(vertSource, shaderc_vertex_shader, "main_vert");
-    auto fragSpirv = Vulkan_GLSL2SPIRV(fragSource, shaderc_fragment_shader, "main_frag");
-
-    DEJAVISUI_LOG_DEBUG("[SHADERTOY] SETUP GRAPH PIPELINE");
-
-
-    if (vertSpirv.empty() || fragSpirv.empty()) {
-        return;
-    }
-    VkShaderModule vertModule = Vulkan_CreateShader(m_ctx->device, vertSpirv);
-    VkShaderModule fragModule = Vulkan_CreateShader(m_ctx->device, fragSpirv);
-
-
-    DEJAVISUI_LOG_DEBUG("[SHADERTOY] SHADER COMPILED");
-
-
-    // --- 3. PIPELINE LAYOUT ---
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &m_descriptorLayout;
-    vkCreatePipelineLayout(m_ctx->device, &pipelineLayoutInfo, nullptr, &m_graphicsPipelineLayout);
-
-
-    DEJAVISUI_LOG_DEBUG("[SHADERTOY] PIPELINE LAYOUT");
-
-    // --- 4. CONFIGURAZIONE PIPELINE ---
-    VkPipelineShaderStageCreateInfo shaderStages[2] = {};
-    shaderStages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vertModule, "main", nullptr };
-    shaderStages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, fragModule, "main", nullptr };
-
-    // Stato Vertex Input (Vuoto per il full screen triangle)
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-    // Viewport e Scissor Dinamici (per gestire resize finestra)
-    VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    VkPipelineRasterizationStateCreateInfo rasterizer = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizer.cullMode = VK_CULL_MODE_NONE;
-    rasterizer.lineWidth = 1.0f;
-
-    VkPipelineMultisampleStateCreateInfo multisampling = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkPipelineColorBlendAttachmentState colorBlend = {};
-    colorBlend.colorWriteMask = 0xF; // RGBA
-    colorBlend.blendEnable = VK_FALSE;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlend;
-
-    VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-    VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-    dynamicState.dynamicStateCount = 2;
-    dynamicState.pDynamicStates = dynStates;
-
-
-
-    // --- 5. CREAZIONE FINALE ---
-    VkGraphicsPipelineCreateInfo pipelineInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = m_graphicsPipelineLayout;
-    pipelineInfo.renderPass = outTexture->renderPass;
-    pipelineInfo.subpass = 0;
-
-    VkResult res = vkCreateGraphicsPipelines(m_ctx->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline);
-    if (res != VK_SUCCESS) {
-        DEJAVISUI_LOG_ERROR("Pipeline creation failed with result: %d", res);
-    }
-
-
-    DEJAVISUI_LOG_DEBUG("[SHADERTOY] PIPELINE OK");
-
-    // Cleanup moduli
-    vkDestroyShaderModule(m_ctx->device, fragModule, nullptr);
-    vkDestroyShaderModule(m_ctx->device, vertModule, nullptr);
-}
-
-*/
 
 void CShaderToy::SetupGraphicsPipeline(std::vector<uint32_t> _spirv_vertx , std::vector<uint32_t> _spirv_frag) {
-    // --- 1. COMPILAZIONE ---
-    //auto vertSpirv = Vulkan_GLSL2SPIRV(vertSource, shaderc_vertex_shader, "main_vert");
-    //auto fragSpirv = Vulkan_GLSL2SPIRV(fragSource, shaderc_fragment_shader, "main_frag");
 
     DEJAVISUI_LOG_DEBUG("[SHADERTOY] SETUP GRAPH PIPELINE");
 
@@ -996,7 +899,7 @@ void CShaderToy::SetupGraphicsPipeline(std::vector<uint32_t> _spirv_vertx , std:
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = m_graphicsPipelineLayout;
-    pipelineInfo.renderPass = outTexture->renderPass;
+    pipelineInfo.renderPass = outUniTexture->VkTexture.renderPass;
     pipelineInfo.subpass = 0;
 
     VkResult res = vkCreateGraphicsPipelines(m_ctx->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline);
@@ -1042,8 +945,8 @@ void CShaderToy::BindAndDraw(VkCommandBuffer cmd) {
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(outTexture->width);
-    viewport.height = static_cast<float>(outTexture->height);
+    viewport.width = static_cast<float>(outUniTexture->VkTexture.width);
+    viewport.height = static_cast<float>(outUniTexture->VkTexture.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -1051,8 +954,8 @@ void CShaderToy::BindAndDraw(VkCommandBuffer cmd) {
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     VkExtent2D extent = {};
-    extent.width = static_cast<float>(outTexture->width);
-    extent.height = static_cast<float>(outTexture->height);
+    extent.width = static_cast<float>(outUniTexture->VkTexture.width);
+    extent.height = static_cast<float>(outUniTexture->VkTexture.height);
     scissor.extent = extent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
@@ -1066,6 +969,7 @@ void CShaderToy::BindAndDraw(VkCommandBuffer cmd) {
 
     // 7. Draw (Full-screen Triangle)
     vkCmdDraw(cmd, 3, 1, 0, 0);
+
 }
 
 VkDescriptorPool CShaderToy::Vulkan_CreateDescriptorPool(
@@ -1169,8 +1073,8 @@ void CShaderToy::AllocateAndUpdateInputDescriptorSet() {
 
 void CShaderToy::UpdateUBO() {
 
-    m_uboData.iResolution[0] = static_cast<float>(outTexture->width);
-    m_uboData.iResolution[1] = static_cast<float>(outTexture->height);
+    m_uboData.iResolution[0] = static_cast<float>(outUniTexture->VkTexture.width);
+    m_uboData.iResolution[1] = static_cast<float>(outUniTexture->VkTexture.height);
     m_uboData.iResolution[2] = 1.0f;
 
     m_uboData.iTimeDelta = currentpc.time- m_uboData.iTime;
@@ -1229,38 +1133,10 @@ bool CShaderToy::UpdateShader(std::vector<uint32_t> _spirvcode){
     return true;
 }
 
-
-/*
-bool CShaderToy::UpdateShader(const std::string& fragSource) {
-
-    std::string fullGLSL = ShaderToy_Comapt_Shader(fragSource);
-    current_frag_shader = fragSource;
-    auto newFragSpirv = Vulkan_GLSL2SPIRV(fullGLSL.c_str(), shaderc_fragment_shader, "main_frag");
-
-    if (newFragSpirv.empty()) {
-        return false;
-    }
-
-    vkDeviceWaitIdle(m_ctx->device);
-
-    if (m_graphicsPipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(m_ctx->device, m_graphicsPipeline, nullptr);
-        m_graphicsPipeline = VK_NULL_HANDLE;
-    }
-    if (m_graphicsPipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(m_ctx->device, m_graphicsPipelineLayout, nullptr);
-        m_graphicsPipelineLayout = VK_NULL_HANDLE;
-    }
-
-    SetupGraphicsPipeline(SHADERTOY_VSHADER, fullGLSL.c_str());
-
-    return true;
-}
-*/
-
 void CShaderToy::Cleanup() {
     if (m_ctx && m_ctx->device != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(m_ctx->device);
+        m_postProcessor.reset();
         if (m_descriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(m_ctx->device, m_descriptorPool, nullptr);
             m_descriptorPool = VK_NULL_HANDLE;
@@ -1323,15 +1199,15 @@ void CShaderToy::imageBarrier(VkCommandBuffer cmd, VkImage img,
     vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
 }
 
-bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h) {
+bool CShaderToy::CreateImageResources(VulkanUniTexture* out, uint32_t w, uint32_t h) {
     if (!out) return false;
 
     if (w == 0 || h == 0) {
         w = 1280; h = 720;
     }
 
-    out->width  = w;
-    out->height = h;
+    out->VkTexture.width  = w;
+    out->VkTexture.height = h;
 
     VkExternalMemoryImageCreateInfo externalInfo = { VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO };
 #ifdef _WIN32
@@ -1355,13 +1231,13 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.pNext         = &externalInfo;
 
-    if (vkCreateImage(m_ctx->device, &imageInfo, nullptr, &out->image) != VK_SUCCESS) return false;
+    if (vkCreateImage(m_ctx->device, &imageInfo, nullptr, &out->VkTexture.image) != VK_SUCCESS) return false;
 
     VkMemoryRequirements memReqs;
-    vkGetImageMemoryRequirements(m_ctx->device, out->image, &memReqs);
+    vkGetImageMemoryRequirements(m_ctx->device, out->VkTexture.image, &memReqs);
 
     VkMemoryDedicatedAllocateInfo dedicatedInfo = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO };
-    dedicatedInfo.image = out->image;
+    dedicatedInfo.image = out->VkTexture.image;
     dedicatedInfo.pNext = nullptr;
 
 #ifdef _WIN32
@@ -1380,8 +1256,8 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
     allocInfo.allocationSize  = memReqs.size;
     allocInfo.memoryTypeIndex = FindMemoryType(m_ctx,memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 #endif
-    if (vkAllocateMemory(m_ctx->device, &allocInfo, nullptr, &out->memory) != VK_SUCCESS) return false;
-    vkBindImageMemory(m_ctx->device, out->image, out->memory, 0);
+    if (vkAllocateMemory(m_ctx->device, &allocInfo, nullptr, &out->VkTexture.memory) != VK_SUCCESS) return false;
+    vkBindImageMemory(m_ctx->device, out->VkTexture.image, out->VkTexture.memory, 0);
 
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format         = VK_FORMAT_R8G8B8A8_UNORM;
@@ -1422,28 +1298,30 @@ bool CShaderToy::CreateImageResources(VulkanTexture* out, uint32_t w, uint32_t h
     rpInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
     rpInfo.pDependencies   = dependencies.data();
 
-    if (vkCreateRenderPass(m_ctx->device, &rpInfo, nullptr, &out->renderPass) != VK_SUCCESS) return false;
+    if (vkCreateRenderPass(m_ctx->device, &rpInfo, nullptr, &out->VkTexture.renderPass) != VK_SUCCESS) return false;
 
     VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-    viewInfo.image            = out->image;
+    viewInfo.image            = out->VkTexture.image;
     viewInfo.viewType         = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format           = VK_FORMAT_R8G8B8A8_UNORM;
     viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-    if (vkCreateImageView(m_ctx->device, &viewInfo, nullptr, &out->view) != VK_SUCCESS) return false;
+    if (vkCreateImageView(m_ctx->device, &viewInfo, nullptr, &out->VkTexture.view) != VK_SUCCESS) return false;
 
     VkFramebufferCreateInfo fbInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-    fbInfo.renderPass      = out->renderPass;
+    fbInfo.renderPass      = out->VkTexture.renderPass;
     fbInfo.attachmentCount = 1;
-    fbInfo.pAttachments    = &out->view;
+    fbInfo.pAttachments    = &out->VkTexture.view;
     fbInfo.width           = w;
     fbInfo.height          = h;
     fbInfo.layers          = 1;
 
-    if (vkCreateFramebuffer(m_ctx->device, &fbInfo, nullptr, &out->framebuffer) != VK_SUCCESS) return false;
+
+
+    if (vkCreateFramebuffer(m_ctx->device, &fbInfo, nullptr, &out->VkTexture.framebuffer) != VK_SUCCESS) return false;
 
     DEJAVISUI_LOG_DEBUG("[VULKAN] SHaderToy Image create: %dx%d (RP: %p, IMG: %p)",
-                        w, h, (void*)out->renderPass, (void*)out->image);
+                        w, h, (void*)out->VkTexture.renderPass, (void*)out->VkTexture.image);
     return true;
 }
 
@@ -1461,6 +1339,40 @@ void CShaderToy::SetiChannelTexture(VulkanUniTexture * _texture, int chanidx) {
     }
 
     DEJAVISUI_LOG_DEBUG("[SHADERTOY] Channel %d set to texture %p", chanidx, _texture);
+}
+
+void CShaderToy::setKeyer(FxKeyerMode _keyer) {
+    if (m_postProcessor) {
+        m_postProcessor->setEnabled(true);
+        m_postProcessor->setKeyerMode(_keyer);
+    }
+}
+
+void CShaderToy::setLumaKey(LumaKeyParams &myparams) {
+    if (m_postProcessor) {
+        m_postProcessor->setEnabled(true);
+        m_postProcessor->setLumaParams(myparams);
+    }
+}
+
+void CShaderToy::setChromaKey(KeyerPushConstants &_mycroma) {
+    if (m_postProcessor) {
+        m_postProcessor->setEnabled(true);
+        m_postProcessor->setChromaParams(_mycroma);
+    }
+}
+
+void CShaderToy::setColor(ColorParams &col) {
+    if (m_postProcessor) {
+        m_postProcessor->setEnabled(true);
+        m_postProcessor->setColorParams(col);
+    }
+}
+
+void CShaderToy::setPostProcessEnabled(bool enabled) {
+    if (m_postProcessor) {
+        m_postProcessor->setEnabled(enabled);
+    }
 }
 
 void CShaderToy::DestroyImageResources(MasterResources* out) {

@@ -438,6 +438,10 @@ void cprojectm_wrapper::InitInteropOpenGL() {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+void cprojectm_wrapper::RenderFBO() {
+    projectm_opengl_render_frame_fbo(_projectM, m_glFbo);
+}
+
 void cprojectm_wrapper::Execute_ProjectM() {
 
     if (m_shouldLoadPresetData) {
@@ -454,8 +458,8 @@ void cprojectm_wrapper::Execute_ProjectM() {
 
 
         glViewport(0, 0, outText->VkTexture.width, outText->VkTexture.height);
+        RenderFBO();
 
-        projectm_opengl_render_frame_fbo(_projectM, m_glFbo);
 
 #ifdef __APPLE__
         glBindBuffer(GL_PIXEL_PACK_BUFFER, outText->glPbo);

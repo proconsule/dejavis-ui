@@ -502,7 +502,6 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
         if (slotid>=1){
             VulkanUniTexture& tex = videoTextures[slotid];
 
-            // 1. Transizione verso l'output
             Vulkan_imageBarrier(cmd, tex.VkTexture.image,
                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -534,14 +533,19 @@ void CRenderer::ProcessVideoMixer_PreRenderPass(VkCommandBuffer cmd) {
             m_shadertoy->Compute(cmd, pc);
             m_shadertoy->BindAndDraw(cmd);
 
+
             vkCmdEndRenderPass(cmd);
 
             // 3. Ritorno alla modalità lettura per il mixer finale
             Vulkan_imageBarrier(cmd, tex.VkTexture.image,
-                         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+            if (auto* pp = m_shadertoy->getPostProcessor()) {
+                pp->submit();
+            }
         }
     }
 }
@@ -695,7 +699,7 @@ bool CRenderer::AddShaderToy(int _video_mixer_id) {
     if (!m_shadertoy) {
         m_shadertoy = new CShaderToy();
         std::string testfrag = "";
-        m_shadertoy->Init(&m_ctx, testfrag,_video_mixer_id,core_w,core_h, &videoTextures[_video_mixer_id].VkTexture);
+        m_shadertoy->Init(&m_ctx, testfrag,_video_mixer_id,core_w,core_h, &videoTextures[_video_mixer_id]);
 
     }
     return true;
@@ -834,6 +838,10 @@ void CRenderer::SetKeyer(int _mixeridx,FxKeyerMode _keyer) {
         }
         if(videoMixerTextures[_mixeridx].ndi_receiver) {
             videoMixerTextures[_mixeridx].ndi_receiver->setKeyer(_keyer);
+        }if (videoMixerTextures[_mixeridx].type == 6) {
+            if (m_shadertoy) {
+                m_shadertoy->setKeyer(_keyer);
+            }
         }
     }
 
@@ -872,6 +880,11 @@ void CRenderer::SetLumaKey(int _mixeridx,LumaKeyParams &params) {
             videoMixerTextures[_mixeridx].ndi_receiver->setLumaKey(params);
 
         }
+        if (videoMixerTextures[_mixeridx].type == 6) {
+            if (m_shadertoy) {
+                m_shadertoy->setLumaKey(params);
+            }
+        }
 
 
     }
@@ -907,6 +920,11 @@ void CRenderer::SetChromaKey(int _mixeridx,KeyerPushConstants &params) {
         if(videoMixerTextures[_mixeridx].ndi_receiver) {
             videoMixerTextures[_mixeridx].ndi_receiver->setChromaKey(params);
         }
+        if (videoMixerTextures[_mixeridx].type == 6) {
+            if (m_shadertoy) {
+                m_shadertoy->setChromaKey(params);
+            }
+        }
 
     }
 }
@@ -930,6 +948,11 @@ void CRenderer::SetColor(int _mixeridx, ColorParams &params) {
         }
         if(videoMixerTextures[_mixeridx].AV_STREAM_DECODER) {
             videoMixerTextures[_mixeridx].AV_STREAM_DECODER->setColor(params);
+        }
+        if (videoMixerTextures[_mixeridx].type == 6) {
+            if (m_shadertoy) {
+                m_shadertoy->setColor(params);
+            }
         }
 
     }
@@ -979,27 +1002,6 @@ void CRenderer::VideoMixer_SyncInputs() {
         m_pendingShadertoyLoad.shouldLoad.store(false);
         AddShaderToy(m_pendingShadertoyLoad.mixerid);
     }
-
-    /*
-     *  DELEGATO A UNIMXIER via handleenevts
-    if (m_pendingInputLoad.shouldLoad.load()) {
-        m_pendingInputLoad.shouldLoad.store(false);
-        AddVideoFilePlayerToMixer(m_pendingInputLoad.url,m_pendingInputLoad.mixerid);
-
-    }
-    if (m_pendingLoad.shouldLoad.load()) {
-        m_pendingLoad.shouldLoad.store(false);
-        int videoslot = m_audio->AUDIO_MIXER.getMixerInputItem(m_pendingLoad.mixerid)->videomixer_idx;
-        if (videoMixerTextures[videoslot].AV_DECODER) {
-            videoMixerTextures[videoslot].AV_DECODER->LoadFileAsync(m_pendingLoad.url);
-        }
-
-    }
-    if (m_peningUnload.shouldUnLoad.load()) {
-        m_peningUnload.shouldUnLoad.store(false);
-        RemoveVideoFilePlayerFromMixer(m_peningUnload.mixerid);
-    }
-    */
 
     if (m_pendingVideoUrlload.shouldLoad.load()) {
         m_pendingVideoUrlload.shouldLoad.store(false);

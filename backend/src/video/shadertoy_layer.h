@@ -12,6 +12,7 @@
 #include <malloc.h>
 #endif
 #include <mutex>
+#include "postprocess.h"
 
 struct FragShadersPushConstants {
     glm::vec3 iRes;
@@ -33,7 +34,7 @@ public:
 
     void CreateRenderPass();
 
-    void Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid,int _w ,int _h, VulkanTexture * _targetIamge);
+    void Init(VulkanContext * _ctx, std::string &frag_shader,int _slotid,int _w ,int _h, VulkanUniTexture * _targetUniTexture);
     void Cleanup();
     void BindAndDraw(VkCommandBuffer cmd);
 
@@ -65,15 +66,15 @@ public:
     std::string current_frag_shader = "";
 
     VkRenderPass getRenderPass() {
-        if (outTexture) {
-            return outTexture->renderPass;
+        if (outUniTexture) {
+            return outUniTexture->VkTexture.renderPass;
         }
         return VK_NULL_HANDLE;
     }
 
     VkFramebuffer getFramebuffer() {
-        if (outTexture) {
-            return outTexture->framebuffer;
+        if (outUniTexture) {
+            return outUniTexture->VkTexture.framebuffer;
         }
         return VK_NULL_HANDLE;
     }
@@ -83,14 +84,24 @@ public:
     }
 
     VkDescriptorSet getOutputDescriptorSet() {
-        return m_outputDescriptorSet;
+        return m_postProcessor ? m_postProcessor->getOutputDescriptorSet() : m_outputDescriptorSet;
+    }
+
+    CPostProcessor* getPostProcessor() {
+        return m_postProcessor.get();
     }
 
     void SetiChannelTexture(VulkanUniTexture *_texture,int chanidx);
 
+    void setKeyer(FxKeyerMode _keyer);
+    void setLumaKey(LumaKeyParams &myparams);
+    void setChromaKey(KeyerPushConstants &_mycroma);
+    void setColor(ColorParams &col);
+    void setPostProcessEnabled(bool enabled);
+
 private:
     VulkanContext* m_ctx;
-
+    std::unique_ptr<CPostProcessor> m_postProcessor;
     std::vector<TextureBinding> m_channels{ 4 };
 
 
@@ -136,7 +147,8 @@ private:
     VulkanTexture m_skyHDR;
     VkSampler m_skySampler{VK_NULL_HANDLE};
 
-    VulkanTexture * outTexture;
+    //VulkanTexture * outTexture;
+    VulkanUniTexture * outUniTexture;
 
     VkDescriptorSetLayout m_outputDescriptorLayout{VK_NULL_HANDLE};
     VkDescriptorSet m_outputDescriptorSet{VK_NULL_HANDLE};
@@ -168,7 +180,7 @@ private:
                       VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkPipelineStageFlags srcStage,
                       VkPipelineStageFlags dstStage);
 
-    bool CreateImageResources(VulkanTexture *out, uint32_t w, uint32_t h);
+    bool CreateImageResources(VulkanUniTexture *out, uint32_t w, uint32_t h);
 
     void DestroyImageResources(MasterResources *out);
 

@@ -150,6 +150,8 @@ public:
 
     wrapperpreset_status_struct preset_status;
 
+    void RenderFBO();
+
 private:
     GLFWwindow* m_glContext = nullptr;
     VulkanContext *m_ctx = nullptr;

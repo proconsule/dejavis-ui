@@ -76,6 +76,11 @@ void CRenderer::GLFW_Vulkan_Submit(VkCommandBuffer cmd, uint32_t imageIndex, uin
         if (auto* nr = videoMixerTextures[i].ndi_receiver) {
             if (auto* pp = nr->getPostProcessor()) pp->processLifecycle(framecount);
         }
+        if (videoMixerTextures[i].type == 6 ) {
+            if (m_shadertoy && m_shadertoy->getPostProcessor()) {
+                m_shadertoy->getPostProcessor()->processLifecycle(framecount);
+            }
+        }
     }
 
     auto drainToWait = [&](std::vector<VkSemaphore>& semList) {
@@ -102,6 +107,11 @@ void CRenderer::GLFW_Vulkan_Submit(VkCommandBuffer cmd, uint32_t imageIndex, uin
         }
         if (auto* nr = videoMixerTextures[i].ndi_receiver) {
             if (auto* fx = nr->getPostProcessor()) fx->getWaitSemaphores(drained);
+        }
+        if (videoMixerTextures[i].type == 6 ) {
+            if (m_shadertoy && m_shadertoy->getPostProcessor()) {
+                m_shadertoy->getPostProcessor()->getWaitSemaphores(drained);
+            }
         }
 
         drainToWait(drained);

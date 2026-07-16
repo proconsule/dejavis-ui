@@ -177,6 +177,11 @@ void cunimixer::SetKeyer(int _mixeridx,FxKeyerMode _keyer) {
         if(video_ref->videoMixerTextures[_mixeridx].ndi_receiver) {
             video_ref->videoMixerTextures[_mixeridx].ndi_receiver->setKeyer(_keyer);
         }
+        if (video_ref->videoMixerTextures[_mixeridx].type == 6) {
+            if (video_ref->m_shadertoy) {
+                video_ref->m_shadertoy->setKeyer(_keyer);
+            }
+        }
     }
 
 }
@@ -213,6 +218,11 @@ void cunimixer::SetLumaKey(int _mixeridx,LumaKeyParams &params) {
         if(video_ref->videoMixerTextures[_mixeridx].ndi_receiver) {
             video_ref->videoMixerTextures[_mixeridx].ndi_receiver->setLumaKey(params);
 
+        }
+        if (video_ref->videoMixerTextures[_mixeridx].type == 6) {
+            if (video_ref->m_shadertoy) {
+                video_ref->m_shadertoy->setLumaKey(params);
+            }
         }
 
 
@@ -251,6 +261,12 @@ void cunimixer::SetChromaKey(int _mixeridx,KeyerPushConstants &params) {
             video_ref->videoMixerTextures[_mixeridx].ndi_receiver->setChromaKey(params);
         }
 
+        if (video_ref->videoMixerTextures[_mixeridx].type == 6) {
+            if (video_ref->m_shadertoy) {
+                video_ref->m_shadertoy->setChromaKey(params);
+            }
+        }
+
     }
 }
 
@@ -275,6 +291,11 @@ void cunimixer::SetColor(int _mixeridx, ColorParams &params) {
         }
         if(video_ref->videoMixerTextures[_mixeridx].AV_STREAM_DECODER) {
             video_ref->videoMixerTextures[_mixeridx].AV_STREAM_DECODER->setColor(params);
+        }
+        if (video_ref->videoMixerTextures[_mixeridx].type == 6) {
+            if (video_ref->m_shadertoy) {
+                video_ref->m_shadertoy->setColor(params);
+            }
         }
 
     }

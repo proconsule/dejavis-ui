@@ -136,6 +136,11 @@ public:
     std::string m_presetDataToLoad = "";
     std::string m_presetDataToLoadOrigFile = "";
 
+    std::string current_preset_data = "";
+
+    std::string getCurrentPresetData() {
+        return current_preset_data;
+    }
 
     //std::string currentpreset = "projectM IDLE Preset";
 

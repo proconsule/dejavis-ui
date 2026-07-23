@@ -8,6 +8,7 @@ CAV_ENCODER* CWebSocket::AV_ENCODER = nullptr;
 cprojectm_wrapper* CWebSocket::m_projectm_wrapper = nullptr;
 std::shared_ptr<WebRTCBroadcaster> CWebSocket::Broadcaster = nullptr;
 cunimixer* CWebSocket::m_cunimixer = nullptr;
+cshadertoydb* CWebSocket::mShaderToyDB = nullptr;
 
 std::vector<WebSocketConnectionPtr> CWebSocket::clients;
 std::mutex CWebSocket::clientsMutex;
@@ -281,7 +282,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 		}
 
 
-		if (json["msgid"] == 4016) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_MOVE_CATEGORY) {
 			int category_id = json["category_id"].asInt();
 			int preset_id = json["preset_id"].asInt();
 			milkPlaylistDB->movePresetToCategory(preset_id,category_id);
@@ -294,7 +295,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 
 		}
 
-		if (json["msgid"] == 4017) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_CATEGORY_DELETE) {
 			Json::Value root;
 			int category_id = json["category_id"].asInt();
 			milkPlaylistDB->deleteCategory(category_id);
@@ -305,7 +306,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 
 		}
 
-		if (json["msgid"] == 4018) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_CATEGORY_ADD) {
 			Json::Value root;
 			std::string catname = json["name"].asString();
 			int parentid = json["parent_id"].asInt();
@@ -316,7 +317,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			wsConnPtr->sendJson(root);
 		}
 
-		if (json["msgid"] == 4019) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_CATEGORY_LIST_REQ) {
 			Json::Value root;
 			Json::Value mycat = milkPlaylistDB->getCategoriesTreeJson();
 			root["msgid"] = 4019;
@@ -324,7 +325,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			wsConnPtr->sendJson(root);
 		}
 
-		if (json["msgid"] == 4020) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_LIST_REQ) {
 			Json::Value root;
 			Json::Value mylist = milkPlaylistDB->getAllPresets_Json();
 			root["msgid"] = 4020;
@@ -333,7 +334,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			wsConnPtr->sendJson(root);
 		}
 
-		if (json["msgid"] == 4021) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_ADD_DATA) {
 			std::string myname = json["name"].asString();
 			std::string b64_content = json["b64_content"].asString();
 			milkPlaylistDB->addPresetFromData(myname,b64_content);
@@ -347,7 +348,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 		}
 
 
-		if (json["msgid"] == 4023) {
+		if (getMsgId(json)  == DEJAVISUI_MSGID::PROJECTM_PRESET_SET_STAR) {
 			uint32_t _presetid = json["presetid"].asUInt();
 			uint32_t _star = json["star"].asUInt();
 			milkPlaylistDB->setPresetStar(_presetid,_star);
@@ -359,7 +360,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			wsConnPtr->sendJson(root);
 		}
 
-		if (json["msgid"] == 4024) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_SET_FAVORITE) {
 			uint32_t _presetid = json["presetid"].asUInt();
 			uint32_t _favorite = json["favorite"].asUInt();
 			milkPlaylistDB->setPresetFavorite(_presetid,_favorite);
@@ -371,7 +372,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			wsConnPtr->sendJson(root);
 		}
 
-		if (json["msgid"] == 4025) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_REMOVE) {
 			int _presetid = json["presetid"].asInt();
 			milkPlaylistDB->removePreset(_presetid);
 			Json::Value root;
@@ -382,7 +383,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			wsConnPtr->sendJson(root);
 		}
 
-		if (json["msgid"] == 4026) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_LOAD_DATA) {
 			int _presetid = json["presetid"].asInt();
 			Json::Value root;
 
@@ -393,10 +394,13 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			m_projectm_wrapper->m_presetDataToLoad = presetdata;
 			m_projectm_wrapper->m_presetDataToLoadOrigFile = preset_origname;
 			m_projectm_wrapper->m_shouldLoadPresetData = true;
+			root["msgid"] = (int)DEJAVISUI_MSGID::PROJECTM_GETPRESET_STRING;
+			root["presets_string"] = presetdata;
+			wsConnPtr->sendJson(root);
 
 		}
 
-		if (getMsgId(json) == DEJAVISUI_MSGID::PRESET_RANDOM) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_RANDOM) {
 			int randid = milkPlaylistDB->getRandom();
 			std::string presetdata = milkPlaylistDB->getPresetContent(randid);
 			std::string preset_origname = milkPlaylistDB->getPresetOrigName(randid);
@@ -407,7 +411,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			m_projectm_wrapper->m_shouldLoadPresetData = true;
 		}
 
-		if (getMsgId(json) == DEJAVISUI_MSGID::PRESET_PREV) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_PREV) {
 			int previd = milkPlaylistDB->prevId(m_projectm_wrapper->preset_status.id);
 			std::string presetdata = milkPlaylistDB->getPresetContent(previd);
 			std::string preset_origname = milkPlaylistDB->getPresetOrigName(previd);
@@ -418,7 +422,7 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			m_projectm_wrapper->m_shouldLoadPresetData = true;
 		}
 
-		if (getMsgId(json) == DEJAVISUI_MSGID::PRESET_NEXT) {
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_PRESET_NEXT) {
 			int nextid = milkPlaylistDB->nextId(m_projectm_wrapper->preset_status.id);
 			std::string presetdata = milkPlaylistDB->getPresetContent(nextid);
 			std::string preset_origname = milkPlaylistDB->getPresetOrigName(nextid);
@@ -427,6 +431,15 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			m_projectm_wrapper->m_presetDataToLoad = presetdata;
 			m_projectm_wrapper->m_presetDataToLoadOrigFile = preset_origname;
 			m_projectm_wrapper->m_shouldLoadPresetData = true;
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::PROJECTM_GETPRESET_STRING) {
+
+			std::string mycurrpreset = m_projectm_wrapper->getCurrentPresetData();
+			Json::Value root;
+			root["msgid"] = (int)DEJAVISUI_MSGID::PROJECTM_GETPRESET_STRING;
+			root["presets_string"] = mycurrpreset;
+			wsConnPtr->sendJson(root);
 		}
 
 
@@ -841,6 +854,49 @@ void CWebSocket::handleNewMessage(const WebSocketConnectionPtr &wsConnPtr,
 			int mixervideosrc_idx = json["mixervideosrc_idx"].asInt();
 			int ichannel = json["ichannel"].asInt();
 
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_GETCURRENT) {
+			if (Renderer->m_shadertoy) {
+				std::string currentshader = Renderer->m_shadertoy->GetCurrentShader();
+				std::string encodedContent = drogon::utils::base64Encode(currentshader);
+				root["msgid"] = (int)DEJAVISUI_MSGID::SHADERTOY_GETCURRENT;
+				root["success"] = true;
+				root["current_b64"] = encodedContent;
+				wsConnPtr->sendJson(root);
+			}
+
+
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_CATEGORY_DELETE) {
+			Json::Value root;
+			int category_id = json["category_id"].asInt();
+			mShaderToyDB->deleteCategory(category_id);
+			Json::Value mycat = mShaderToyDB->getCategoriesTreeJson();
+			root["msgid"] = 20019;
+			root["categories"] = mycat;
+			wsConnPtr->sendJson(root);
+
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_CATEGORY_ADD) {
+			Json::Value root;
+			std::string catname = json["name"].asString();
+			int parentid = json["parent_id"].asInt();
+			mShaderToyDB->addCategory(catname,parentid);
+			Json::Value mycat = mShaderToyDB->getCategoriesTreeJson();
+			root["msgid"] = 20019;
+			root["categories"] = mycat;
+			wsConnPtr->sendJson(root);
+		}
+
+		if (getMsgId(json) == DEJAVISUI_MSGID::SHADERTOY_CATEGORY_LIST_REQ) {
+			Json::Value root;
+			Json::Value mycat = mShaderToyDB->getCategoriesTreeJson();
+			root["msgid"] = 20019;
+			root["categories"] = mycat;
+			wsConnPtr->sendJson(root);
 		}
 
 

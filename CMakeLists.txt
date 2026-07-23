@@ -315,6 +315,7 @@ set(DEJAVISUI_COMMON_SOURCES
         backend/src/video/yuv2rgb/converters/NV12Converter.cpp
         backend/src/video/yuv2rgb/converters/P010Converter.cpp
         backend/src/video/shadertoy_layer.cpp
+        backend/src/db/shadertoydb.cpp
         backend/src/unimixer.cpp
         backend/src/audio/audioeffects/audioeffects.cpp
         backend/src/audio/audioeffects/EffectBank.cpp

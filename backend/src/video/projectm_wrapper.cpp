@@ -446,6 +446,7 @@ void cprojectm_wrapper::Execute_ProjectM() {
 
     if (m_shouldLoadPresetData) {
         projectm_load_preset_data(_projectM, m_presetDataToLoad.c_str(), false);
+        current_preset_data = m_presetDataToLoad;
         preset_status.name = m_presetDataToLoadOrigFile;
         preset_status.id = m_shouldLoadPresetID;
         m_shouldLoadPresetData = false;

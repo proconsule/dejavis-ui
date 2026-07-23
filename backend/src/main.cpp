@@ -19,6 +19,8 @@
 #include "video/projectm_wrapper.h"
 #include "fs/folders.h"
 #include "userconfig.h"
+#include "db/shadertoydb.h"
+
 
 
 #ifdef _WIN32
@@ -44,6 +46,7 @@ CAV_DECODER AV_Decoder;
 cprojectm_wrapper projectm_wrapper;
 
 cmilkplaylistdb milkplaylistdb;
+cshadertoydb shadertoydb;
 cuserconfig userconfig;
 
 cunimixer unimixer;
@@ -97,6 +100,7 @@ int main(int argc, char* argv[]) {
 
     std::string audiopath = audio_config["file_path"].asString();
     milkplaylistdb.Init(configpath + "projectm_milk.db");
+    shadertoydb.Init(configpath + "shadertoydb.db");
 
 
     Audio.m_projectm_wrapper = &projectm_wrapper;
@@ -201,6 +205,7 @@ int main(int argc, char* argv[]) {
     CWebSocket::Renderer = &Renderer;
     CWebSocket::Audio = &Audio;
     CWebSocket::milkPlaylistDB = &milkplaylistdb;
+    CWebSocket::mShaderToyDB = &shadertoydb;
     CWebSocket::AV_ENCODER = &AV_Encoder;
     CWebSocket::m_projectm_wrapper = &projectm_wrapper;
     CWebSocket::m_cunimixer = &unimixer;
@@ -225,12 +230,19 @@ int main(int argc, char* argv[]) {
         if (std::filesystem::exists(certPath) && std::filesystem::exists(keyPath)) {
             DEJAVISUI_LOG_DEBUG("Websocket Ready with https mode and WEBRTC Audio support!");
             app().addListener("0.0.0.0", 8848, true, certPath, keyPath);
+
+            app().setFileTypes({
+                "html", "js", "css",  // Fondamentali per caricare l'interfaccia web
+                "wasm",               // Abilita il file WebAssembly di projectM
+                "data",               // Se usi la memoria pre-caricata di Emscripten
+                "png", "jpg", "ico"   // Immagini ed icone standard
+            });
+
 #ifdef __APPLE__
             app().setDocumentRoot(getMacResourcesFrontendPath());
 #else
             app().setDocumentRoot("./webpages");
 #endif
-
             app().setClientMaxBodySize(500 * 1024 * 1024);
             app().registerPostHandlingAdvice([](const drogon::HttpRequestPtr &, const drogon::HttpResponsePtr &resp) {
                 resp->addHeader("Access-Control-Allow-Origin", "*");
@@ -261,6 +273,8 @@ int main(int argc, char* argv[]) {
                 //app().quit();
                 running = false;
             });
+            app().registerCustomExtensionMime("wasm", "application/wasm");
+
             DEJAVISUI_LOG_INFO("Listening on port http 8848");
             app().run();
         }
